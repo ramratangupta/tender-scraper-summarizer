@@ -1,0 +1,14 @@
+{
+  "name": "tender-scraper-summarizer",
+  "version": "1.0.0",
+  "main": "index.js",
+  "scripts": {
+    "backend": "cd backend && npm run dev",
+    "frontend": "cd frontend && npm start",
+    "install:all": "npm install && cd scraper && npm install && cd ../backend && npm install && cd ../frontend && npm install"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "description": ""
+}

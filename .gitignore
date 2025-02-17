@@ -69,3 +69,4 @@ out/
 
 # Test output
 test-results/
+.vercel
