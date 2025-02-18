@@ -3,7 +3,17 @@ import dotenv from "dotenv";
 import axios from "axios";
 import { load } from "cheerio";
 import pdf from "pdf-parse/lib/pdf-parse.js";
+import mysql from "mysql2/promise";
 dotenv.config();
+const pool = mysql.createPool({
+  host: process.env.DB_HOST || "localhost",
+  user: process.env.DB_USER,
+  password: process.env.DB_PASSWORD,
+  database: process.env.DB_NAME,
+  waitForConnections: true,
+  connectionLimit: 10,
+  queueLimit: 0,
+});
 // Check if API key exists
 if (!process.env.GOOGLE_API_KEY) {
   throw new Error("GOOGLE_API_KEY is not set in environment variables");
@@ -32,21 +42,25 @@ async function scrapeWebsite(url) {
     const $ = load(response.data);
     //title,description, start date, closing date, department, contact info, etc
     const tenders = [];
-    $("#tenders tbody tr").each((index, element) => {
+    $("#tenders tbody tr").each(async (index, element) => {
       const tds = $(element).find("td");
       const tenderURL = tds.eq(2).find("a").attr("href");
       if (!tenderURL) {
         console.warn(`Missing tender URL for row ${index + 1}`);
         return; // Skip this iteration
       }
-      const row = {
-        tenderid: tds.eq(1).text().trim(),
-        title: tds.eq(2).text().trim(),
-        lastDate: tds.eq(3).text().trim(),
-        publishDate: tds.eq(4).text().trim(),
-        tenderURL: tenderURL,
-      };
-      tenders.push(row);
+      const tenderid = tds.eq(1).text().trim();
+      const checkDB = await checkTenderExtis(tenders[0].tenderid);
+      if (checkDB[0].length == 0) {
+        const row = {
+          tenderid: tenderid,
+          title: tds.eq(2).text().trim(),
+          lastDate: tds.eq(3).text().trim(),
+          publishDate: tds.eq(4).text().trim(),
+          tenderURL: tenderURL,
+        };
+        tenders.push(row);
+      }
     });
     if (tenders.length === 0) {
       console.warn("No tenders found on the page");
@@ -141,7 +155,6 @@ async function processTenders() {
     if (!tenders || tenders.length === 0) {
       throw new Error("No tenders found to process");
     }
-
     const results = await Promise.allSettled(
       tenders.map(async (tender) => {
         try {
@@ -182,7 +195,51 @@ async function processTenders() {
   }
 }
 
+async function createTender(tenderData) {
+  const sql = `
+    INSERT INTO tenders 
+    (tenderid, title,raw_description,aiml_summary,email, lastDate, publishDate, tenderURL, phone, requirements) 
+    VALUES ( ?, ?, ?, ?, ?, ?, ?, ?,?,?)`;
+  const params = [
+    tenderData.tenderid,
+    tenderData.title,
+    tenderData.raw_data,
+    tenderData.llm_analysis.summary,
+    tenderData.llm_analysis.email,
+    tenderData.lastDate,
+    tenderData.publishDate,
+    tenderData.tenderURL,
+    tenderData.llm_analysis.phone.join(","),
+    tenderData.llm_analysis.requirements.join("\n"),
+  ];
+  return pool.query(sql, params);
+}
+
+async function checkTenderExtis(tenderid) {
+  try {
+    const sql = `select  tenderid from tenders where tenderid =?`;
+    const params = [tenderid];
+    return await pool.query(sql, params);
+  } catch (error) {
+    console.error("Error checking database:", error);
+    throw error;
+  }
+}
 // Execute
 processTenders()
-  .then((results) => console.log("Processed tenders:", results))
+  .then((results) => {
+    if (results && results.length > 0) {
+      results.forEach((tender) => {
+        createTender(tender)
+          .then(() =>
+            console.log(`Tender ${tender.tenderid} saved successfully`)
+          )
+          .catch((error) =>
+            console.error(`Error saving tender ${tender.tenderid}:`, error)
+          );
+      });
+    } else {
+      console.log("No tenders to process");
+    }
+  })
   .catch((error) => console.error("Application error:", error));
