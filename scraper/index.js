@@ -28,44 +28,66 @@ async function scrapeWebsite(url) {
     if (!url) {
       throw new Error("URL is required");
     }
+
     // Make HTTP request to the website
     const response = await axios.get(url, {
-      // Add headers to mimic a real browser request
       headers: {
         "User-Agent":
           "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36",
       },
     });
+
     if (!response.data) {
       throw new Error("No data received from the website");
     }
+
     const $ = load(response.data);
-    //title,description, start date, closing date, department, contact info, etc
-    const tenders = [];
-    $("#tenders tbody tr").each(async (index, element) => {
-      const tds = $(element).find("td");
-      const tenderURL = tds.eq(2).find("a").attr("href");
-      if (!tenderURL) {
-        console.warn(`Missing tender URL for row ${index + 1}`);
-        return; // Skip this iteration
-      }
-      const tenderid = tds.eq(1).text().trim();
-      const checkDB = await checkTenderExtis(tenders[0].tenderid);
-      if (checkDB[0].length == 0) {
-        const row = {
-          tenderid: tenderid,
-          title: tds.eq(2).text().trim(),
-          lastDate: tds.eq(3).text().trim(),
-          publishDate: tds.eq(4).text().trim(),
-          tenderURL: tenderURL,
-        };
-        tenders.push(row);
-      }
-    });
-    if (tenders.length === 0) {
-      console.warn("No tenders found on the page");
+    const rows = $("#tenders tbody tr").toArray();
+
+    // Process all rows in parallel using Promise.all
+    const tenders = await Promise.all(
+      rows.map(async (element, index) => {
+        const tds = $(element).find("td");
+        const tenderURL = tds.eq(2).find("a").attr("href");
+
+        if (!tenderURL) {
+          console.warn(`Missing tender URL for row ${index + 1}`);
+          return null; // Skip this row
+        }
+        const tenderid = tds.eq(1).text().trim();
+
+        try {
+          const checkDB = await checkTenderExtis(tenderid);
+          console.log(`Checking tender ${tenderid}:`, checkDB);
+
+          // If tender doesn't exist in DB
+          if (checkDB[0].length === 0) {
+            return {
+              tenderid: tenderid,
+              title: tds.eq(2).text().trim(),
+              lastDate: tds.eq(3).text().trim(),
+              publishDate: tds.eq(4).text().trim(),
+              tenderURL: tenderURL,
+            };
+          }
+        } catch (error) {
+          console.error(`Error checking tender ${tenderid}:`, error);
+        }
+
+        return null; // Skip if tender exists or error occurred
+      })
+    );
+
+    // Filter out null values and empty results
+    const validTenders = tenders.filter((tender) => tender !== null);
+
+    if (validTenders.length === 0) {
+      console.warn("No new tenders found to process");
+    } else {
+      console.log(`Found ${validTenders.length} new tenders to process`);
     }
-    return tenders;
+
+    return validTenders;
   } catch (error) {
     if (error.response) {
       throw new Error(
@@ -97,6 +119,7 @@ async function downloadPDF(url) {
     throw new Error(`PDF download failed: ${error.message}`);
   }
 }
+
 async function analyzeTenderContent(text) {
   try {
     if (!text || typeof text !== "string") {
@@ -136,12 +159,19 @@ async function analyzeTenderContent(text) {
       throw new Error(parseError.message);
     }
   } catch (error) {
+    if (error.message.includes("429") || error.message.includes("quota")) {
+      // If we hit rate limit, wait for 60 seconds before throwing
+      console.log("Rate limit hit, waiting 120 seconds...");
+      await new Promise((resolve) => setTimeout(resolve, 120000));
+      // Retry once after waiting
+      return analyzeTenderContent(text);
+    }
     throw new Error(error.message);
   }
 }
 async function processTenders() {
   try {
-    const tenders = await scrapeWebsite(targetWebsiteUrl);    
+    const tenders = await scrapeWebsite(targetWebsiteUrl);
     if (!tenders || tenders.length === 0) {
       throw new Error("No tenders found to process");
     }
@@ -151,7 +181,7 @@ async function processTenders() {
           const pdfData = await downloadPDF(tender.tenderURL);
           const data = await pdf(pdfData);
           // Add delay between API calls
-          await new Promise((resolve) => setTimeout(resolve, 1000));
+          await new Promise((resolve) => setTimeout(resolve, 60000));
           tender.raw_data = data.text;
           tender.llm_analysis = await analyzeTenderContent(data.text);
           return tender;
