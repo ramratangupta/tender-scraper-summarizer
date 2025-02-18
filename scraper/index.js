@@ -141,17 +141,7 @@ async function analyzeTenderContent(text) {
 }
 async function processTenders() {
   try {
-    //const tenders = await scrapeWebsite(targetWebsiteUrl);
-    const tenders = [
-      {
-        tenderid: "4199",
-        title: "NOTICE INVITING EXPRESSION OF INTEREST FROM BANKS",
-        lastDate: "31-03-2025",
-        publishDate: "05-04-2024",
-        tenderURL:
-          "https://home.iitd.ac.in/public/storage/tenders/4199_EOI_1712294149.pdf",
-      },
-    ];
+    const tenders = await scrapeWebsite(targetWebsiteUrl);    
     if (!tenders || tenders.length === 0) {
       throw new Error("No tenders found to process");
     }
