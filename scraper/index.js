@@ -14,11 +14,6 @@ const pool = mysql.createPool({
   connectionLimit: 10,
   queueLimit: 0,
 });
-// Check if API key exists
-if (!process.env.GOOGLE_API_KEY) {
-  throw new Error("GOOGLE_API_KEY is not set in environment variables");
-}
-
 /**
  * I choosed this becasue it do not require any capatca
  */
@@ -86,7 +81,7 @@ async function scrapeWebsite(url) {
       console.log(`Found ${validTenders.length} new tenders to process`);
     }
 
-    return validTenders;
+    return [validTenders[1]];
   } catch (error) {
     if (error.response) {
       throw new Error(
@@ -227,7 +222,11 @@ async function processTenders() {
     throw error;
   }
 }
-
+function formatDateMYSQL(dateString) {
+  //18-02-2025
+  const [day, month, year] = dateString.split("-");
+  return `${year}-${month}-${day}`;
+}
 async function createTender(tenderData) {
   const sql = `
     INSERT INTO tenders 
@@ -237,8 +236,8 @@ async function createTender(tenderData) {
     tenderData.tenderid,
     tenderData.title,
     tenderData.raw_data,
-    tenderData.lastDate,
-    tenderData.publishDate,
+    formatDateMYSQL(tenderData.lastDate),
+    formatDateMYSQL(tenderData.publishDate),
     tenderData.tenderURL
   ];
   return pool.query(sql, params);
