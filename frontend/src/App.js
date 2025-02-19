@@ -10,27 +10,139 @@ import "bootstrap/dist/css/bootstrap.min.css";
 import { Modal, Button } from "react-bootstrap";
 function TenderList() {
   const [list, setList] = useState([]);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState(null);
   const [pagination, setPagination] = useState({});
-  useEffect(() => {
-    const fetchData = async () => {
-      try {
-        const response = await fetch("http://localhost:2900/api/tenders");
-        const data = await response.json();
-        setList(data.data);
-        setPagination(data.pagination);
-      } catch (error) {
-        console.error("Error fetching data:", error);
-      }
+  const [filters, setFilters] = useState({
+    tenderId: "",
+    keywords: "",
+    startDate: "",
+    endDate: "",
+  });
+
+  const fetchTenders = async () => {
+    try {
+      setLoading(true);
+      setError(null);
+
+      // Build query parameters
+      const params = new URLSearchParams();
+
+      if (filters.keywords) params.append("keywords", filters.keywords);
+      if (filters.startDate) params.append("startDate", filters.startDate);
+      if (filters.endDate) params.append("endDate", filters.endDate);
+      if (filters.tenderId) params.append("tenderId", filters.tenderId);
+
+      const response = await fetch(
+        `http://localhost:2900/api/tenders?${params.toString()}`
+      );
+      const data = await response.json();
+      setList(data.data);
+      setPagination(data.pagination);
+    } catch (err) {
+      setError("Failed to fetch tenders. Please try again.");
+      console.error("Error fetching tenders:", err);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Debounce function to prevent too many API calls
+  const debounce = (func, delay) => {
+    let timeoutId;
+    return (...args) => {
+      clearTimeout(timeoutId);
+      timeoutId = setTimeout(() => func(...args), delay);
     };
-    fetchData();
+  };
+
+  // Debounced version of fetchTenders
+  const debouncedFetch = debounce(fetchTenders, 500);
+
+  // Handle filter changes
+  const handleFilterChange = (e) => {
+    const { name, value } = e.target;
+    setFilters((prevFilters) => ({
+      ...prevFilters,
+      [name]: value,
+    }));
+  };
+
+  // Effect to trigger API call when filters change
+  useEffect(() => {
+    debouncedFetch();
+  }, [filters]);
+
+  // Function to clear all filters
+  const clearFilters = () => {
+    setFilters({
+      tenderId: "",
+      keywords: "",
+      startDate: "",
+      endDate: "",
+    });
+  };
+
+  useEffect(() => {
+    fetchTenders();
     return () => {
       console.log("unmounting");
       setList([]);
+      setPagination({});
     };
   }, []);
   return (
     <div className="ms-1 me-1">
       <h1>IIT Delhi Tender List</h1>
+      <div className="row">
+        <div className="col-3">
+          <input
+            type="text"
+            name="tenderId"
+            placeholder="Search by Tender ID"
+            value={filters.tenderId}
+            onChange={handleFilterChange}
+            className="form-control"
+          />
+        </div>
+        <div className="col-3">
+          <input
+            type="text"
+            name="keywords"
+            placeholder="Search by keywords"
+            value={filters.keywords}
+            onChange={handleFilterChange}
+            className="form-control"
+          />
+        </div>
+        <div className="col-3">
+          <input
+            type="date"
+            name="startDate"
+            value={filters.startDate}
+            onChange={handleFilterChange}
+            className="form-control"
+          />
+        </div>
+        <div className="col-3">
+          <input
+            type="date"
+            name="endDate"
+            value={filters.endDate}
+            onChange={handleFilterChange}
+            className="col-2 form-control"
+          />
+        </div>
+      </div>
+      <div className="row mt-3 mb-3">
+        <div className="col">
+          <button onClick={clearFilters} className="btn btn-primary float-end">
+            Clear Filters
+          </button>
+          {error && <div className="col error-message">{error}</div>}
+          {loading && <Loader />}
+        </div>
+      </div>
       <div className="row p-2 text-bg-dark">
         <div className="col-2 fw-bold">
           <span className="float-start">Tender ID</span>
@@ -101,7 +213,7 @@ function TenderDetails() {
     <div>
       <Modal
         show={showModal}
-        onHide={()=>setShowModal(false)}
+        onHide={() => setShowModal(false)}
         size="lg"
         aria-labelledby="description-modal"
         centered
@@ -110,11 +222,15 @@ function TenderDetails() {
           <Modal.Title id="description-modal">Tender Description</Modal.Title>
         </Modal.Header>
         <Modal.Body>
-          <div style={{ whiteSpace: "pre-wrap" }}>{tenderData.raw_description}</div>
+          <div style={{ whiteSpace: "pre-wrap" }}>
+            {tenderData.raw_description}
+          </div>
         </Modal.Body>
         <Modal.Footer>
-          <Button variant="secondary" onClick={()=>setShowModal(false)}>
-          </Button>
+          <Button
+            variant="secondary"
+            onClick={() => setShowModal(false)}
+          ></Button>
         </Modal.Footer>
       </Modal>
       <div className="row">
@@ -163,7 +279,7 @@ function TenderDetails() {
 
       <div className="row">
         <div className="col">
-        <Link
+          <Link
             target="_blank"
             className="btn btn-primary float-end"
             to={tenderData.tenderURL}
@@ -176,7 +292,6 @@ function TenderDetails() {
           >
             View PDF Parsed Decription
           </Button>
-          
         </div>
       </div>
     </div>
