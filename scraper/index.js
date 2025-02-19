@@ -114,63 +114,6 @@ async function downloadPDF(url) {
     throw new Error(`PDF download failed: ${error.message}`);
   }
 }
-
-async function analyzeTenderContent(text) {
-  try {
-    //console.log("Analyzing tender content...",text);
-    if (!text || typeof text !== "string") {
-      throw new Error("No text provided for analysis");
-    }
-    const genAI = new GoogleGenerativeAI(process.env.GOOGLE_API_KEY);
-    const model = genAI.getGenerativeModel({ model: "gemini-pro" });
-
-    const prompt = `
-            Analyze this tender document and extract the following information in a valid JSON format:
-            1. Brief summary of requirements
-            2. Email
-            3. Phone
-            4. Key Requirements
-
-            Return ONLY the JSON object with no additional text or markdown formatting.
-            Use this exact format:
-            {
-                "summary": "text here",
-                "email": "email here",
-                "phone": ["number1", "number2"],
-                "requirements": ["req1", "req2"]
-            }
-
-            Tender text:
-            ${text}`;
-
-    const result = await model.generateContent(prompt);
-    console.log("LLM Response1:",result);
-    const response = await result.response.text();
-    console.log("LLM Response2:",response);
-    try {
-      const cleanedResponse = response.replace(/```json|```/g, "").trim();
-      console.log("LLM Response cleanedResponse:",cleanedResponse);
-      const parsedResponse = JSON.parse(cleanedResponse);
-      if (!parsedResponse.summary || !parsedResponse.requirements) {
-        throw new Error("Invalid response structure");
-      }
-      console.log("LLM Response:", parsedResponse);
-      return parsedResponse;
-    } catch (parseError) {
-      throw new Error(parseError.message);
-    }
-  } catch (error) {
-    console.error("Error analyzing tender content:", error.message);
-    if (error.message.includes("429") || error.message.includes("quota")) {
-      // If we hit rate limit, wait for 60 seconds before throwing
-      console.log("Rate limit hit, waiting 120 seconds...");
-      await delay(180,"ML Retry");
-      // Retry once after waiting
-      //return analyzeTenderContent(text);
-    }
-    throw new Error(error.message);
-  }
-}
 const delay = (s,process) => {
   console.log(`${process} Waiting for ${s} seconds...`);
   return new Promise(resolve => setTimeout(resolve, s*1000))
