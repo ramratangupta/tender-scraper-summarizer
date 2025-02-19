@@ -1,4 +1,4 @@
-import { GoogleGenerativeAI } from "@google/generative-ai";
+
 import dotenv from "dotenv";
 import axios from "axios";
 import { load } from "cheerio";
@@ -18,7 +18,7 @@ const pool = mysql.createPool({
 if (!process.env.GOOGLE_API_KEY) {
   throw new Error("GOOGLE_API_KEY is not set in environment variables");
 }
-const genAI = new GoogleGenerativeAI(process.env.GOOGLE_API_KEY);
+
 /**
  * I choosed this becasue it do not require any capatca
  */
@@ -98,6 +98,7 @@ async function scrapeWebsite(url) {
 }
 async function downloadPDF(url) {
   try {
+    console.log("Downloading PDF from:", url);
     if (!url) {
       throw new Error("PDF URL is required");
     }
@@ -121,9 +122,11 @@ async function downloadPDF(url) {
 
 async function analyzeTenderContent(text) {
   try {
+    //console.log("Analyzing tender content...",text);
     if (!text || typeof text !== "string") {
       throw new Error("No text provided for analysis");
     }
+    const genAI = new GoogleGenerativeAI(process.env.GOOGLE_API_KEY);
     const model = genAI.getGenerativeModel({ model: "gemini-pro" });
 
     const prompt = `
@@ -146,43 +149,50 @@ async function analyzeTenderContent(text) {
             ${text}`;
 
     const result = await model.generateContent(prompt);
+    console.log("LLM Response1:",result);
     const response = await result.response.text();
+    console.log("LLM Response2:",response);
     try {
       const cleanedResponse = response.replace(/```json|```/g, "").trim();
+      console.log("LLM Response cleanedResponse:",cleanedResponse);
       const parsedResponse = JSON.parse(cleanedResponse);
       if (!parsedResponse.summary || !parsedResponse.requirements) {
         throw new Error("Invalid response structure");
       }
+      console.log("LLM Response:", parsedResponse);
       return parsedResponse;
     } catch (parseError) {
       throw new Error(parseError.message);
     }
   } catch (error) {
+    console.error("Error analyzing tender content:", error.message);
     if (error.message.includes("429") || error.message.includes("quota")) {
       // If we hit rate limit, wait for 60 seconds before throwing
       console.log("Rate limit hit, waiting 120 seconds...");
-      await new Promise((resolve) => setTimeout(resolve, 120000));
+      await delay(180,"ML Retry");
       // Retry once after waiting
-      return analyzeTenderContent(text);
+      //return analyzeTenderContent(text);
     }
     throw new Error(error.message);
   }
 }
+const delay = (s,process) => {
+  console.log(`${process} Waiting for ${s} seconds...`);
+  return new Promise(resolve => setTimeout(resolve, s*1000))
+};
 async function processTenders() {
   try {
     const tenders = await scrapeWebsite(targetWebsiteUrl);
     if (!tenders || tenders.length === 0) {
       throw new Error("No tenders found to process");
     }
+    const results = [];
     for (const tender of tenders) {
       try {
         console.log(`Tender ${tender.tenderid} Starting progress`)
-        await new Promise((resolve) => setTimeout(resolve, 15000));
         const pdfData = await downloadPDF(tender.tenderURL);
         const data = await pdf(pdfData);
-        await new Promise((resolve) => setTimeout(resolve, 60000));
         tender.raw_data = data.text;
-        tender.llm_analysis = await analyzeTenderContent(data.text);
         results.push({
           status: "fulfilled",
           value: tender,
@@ -194,6 +204,8 @@ async function processTenders() {
           reason: error.message,
         });
       }
+      await delay(2,"PDF");
+        
     }
 
     // Filter and process results
@@ -219,19 +231,15 @@ async function processTenders() {
 async function createTender(tenderData) {
   const sql = `
     INSERT INTO tenders 
-    (tenderid, title,raw_description,aiml_summary,email, lastDate, publishDate, tenderURL, phone, requirements) 
-    VALUES ( ?, ?, ?, ?, ?, ?, ?, ?,?,?)`;
+    (tenderid, title,raw_description, lastDate, publishDate, tenderURL,status) 
+    VALUES ( ?, ?, ?, ?, ?, ?,0)`;
   const params = [
     tenderData.tenderid,
     tenderData.title,
     tenderData.raw_data,
-    tenderData.llm_analysis.summary,
-    tenderData.llm_analysis.email,
     tenderData.lastDate,
     tenderData.publishDate,
-    tenderData.tenderURL,
-    tenderData.llm_analysis.phone.join(","),
-    tenderData.llm_analysis.requirements.join("\n"),
+    tenderData.tenderURL
   ];
   return pool.query(sql, params);
 }
@@ -246,6 +254,8 @@ async function checkTenderExtis(tenderid) {
     throw error;
   }
 }
+
+//process.exit()
 // Execute
 processTenders()
   .then((results) => {
