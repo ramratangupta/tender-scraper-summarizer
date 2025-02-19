@@ -21,9 +21,9 @@ const pool = mysql.createPool({
 // GET endpoint for fetching tenders with optional filters
 app.get("/api/tenders", async (req, res) => {
   try {
-    let { keywords, startDate, endDate, page = 1, limit = 10 } = req.query;
+    let { tenderId,keywords, startDate, endDate, page = 1, limit = 10 } = req.query;
     let query =
-      "SELECT  tenderid, title, aiml_summary, lastDate FROM tenders WHERE 1=1";
+      "SELECT  tenderid, title, aiml_summary, lastDate FROM tenders WHERE status=1";
     let whereClause = "";
     const params = [];
     // Add filters if provided
@@ -36,6 +36,10 @@ app.get("/api/tenders", async (req, res) => {
       whereClause += " AND lastDate <= ?";
       params.push(endDate);
     }
+    if (tenderId) {
+        whereClause += " AND tenderid = ?";
+        params.push(tenderId);
+      }
 
     if (keywords) {
       whereClause += " AND (title LIKE ? OR aiml_summary LIKE ?)";
@@ -56,7 +60,7 @@ app.get("/api/tenders", async (req, res) => {
 
     // Get total count for pagination
     const [countResult] = await pool.query(
-      `SELECT COUNT(*) as total FROM tenders WHERE 1=1 ${whereClause}`,
+      `SELECT COUNT(*) as total FROM tenders WHERE status=1 ${whereClause}`,
       params
     );
     const totalCount = countResult[0].total;
@@ -84,7 +88,7 @@ app.get("/api/tenders", async (req, res) => {
 app.get("/api/tenders/:id", async (req, res) => {
   try {
     const [results] = await pool.execute(
-      "SELECT * FROM tenders WHERE tenderid = ?",
+      "SELECT * FROM tenders WHERE status=1 and tenderid = ?",
       [req.params.id]
     );
 
