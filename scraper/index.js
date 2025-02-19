@@ -57,8 +57,7 @@ async function scrapeWebsite(url) {
         const tenderid = tds.eq(1).text().trim();
 
         try {
-          const checkDB = await checkTenderExtis(tenderid);
-          console.log(`Checking tender ${tenderid}:`, checkDB);
+          const checkDB = await checkTenderExtis(tenderid);         
 
           // If tender doesn't exist in DB
           if (checkDB[0].length === 0) {
@@ -175,25 +174,27 @@ async function processTenders() {
     if (!tenders || tenders.length === 0) {
       throw new Error("No tenders found to process");
     }
-    const results = await Promise.allSettled(
-      tenders.map(async (tender) => {
-        try {
-          const pdfData = await downloadPDF(tender.tenderURL);
-          const data = await pdf(pdfData);
-          // Add delay between API calls
-          await new Promise((resolve) => setTimeout(resolve, 60000));
-          tender.raw_data = data.text;
-          tender.llm_analysis = await analyzeTenderContent(data.text);
-          return tender;
-        } catch (error) {
-          console.error(`Error processing tender ${tender.tenderid}:`, error);
-          return {
-            ...tender,
-            error: error.message,
-          };
-        }
-      })
-    );
+    for (const tender of tenders) {
+      try {
+        console.log(`Tender ${tender.tenderid} Starting progress`)
+        await new Promise((resolve) => setTimeout(resolve, 15000));
+        const pdfData = await downloadPDF(tender.tenderURL);
+        const data = await pdf(pdfData);
+        await new Promise((resolve) => setTimeout(resolve, 60000));
+        tender.raw_data = data.text;
+        tender.llm_analysis = await analyzeTenderContent(data.text);
+        results.push({
+          status: "fulfilled",
+          value: tender,
+        });
+      } catch (error) {
+        console.error(`Error processing tender ${tender.tenderid}:`, error);
+        results.push({
+          status: "rejected",
+          reason: error.message,
+        });
+      }
+    }
 
     // Filter and process results
     const successfulTenders = results
