@@ -84,7 +84,7 @@ app.get("/api/tenders", async (req, res) => {
 app.get("/api/tenders/:id", async (req, res) => {
   try {
     const [results] = await pool.execute(
-      "SELECT * FROM tenders WHERE tender_id = ?",
+      "SELECT * FROM tenders WHERE tenderid = ?",
       [req.params.id]
     );
 
