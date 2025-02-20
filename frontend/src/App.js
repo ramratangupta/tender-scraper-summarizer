@@ -8,7 +8,7 @@ import {
 } from "react-router-dom";
 import "bootstrap/dist/css/bootstrap.min.css";
 import { Modal, Button } from "react-bootstrap";
-const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:2900/api';
+const apiUrl = process.env.REACT_APP_API_URL || 'http://localhost:2900/api';
 function TenderList() {
   const [list, setList] = useState([]);
   const [loading, setLoading] = useState(false);
