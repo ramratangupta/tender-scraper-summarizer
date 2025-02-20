@@ -36,9 +36,14 @@ function TenderList() {
       if (pagination.currentPage) params.append("page", pagination.currentPage);
 
       const response = await fetch(`${apiUrl}/tenders?${params.toString()}`);
-      const data = await response.json();
-      setList(data.data);
-      setPagination(data.pagination);
+      if (response.ok) {
+        const data = await response.json();
+        setList(data.data);
+        setPagination(data.pagination);
+      } else {
+        const data = await response.json();
+        setError("Failed to fetch tenders. Please try again. " + data.error);
+      }
     } catch (err) {
       setError("Failed to fetch tenders. Please try again.");
       console.error("Error fetching tenders:", err);
@@ -59,7 +64,6 @@ function TenderList() {
   // Effect for initial load
   useEffect(() => {
     fetchTenders();
-
   }, [fetchTenders]); // Empty dependency array for initial load only
 
   // Effect for filter changes with debounce
@@ -70,7 +74,7 @@ function TenderList() {
     }, 1000);
 
     return () => clearTimeout(timeoutId);
-  }, [fetchTenders,filters,pagination.currentPage]);
+  }, [fetchTenders, filters, pagination.currentPage]);
 
   // Function to clear all filters
   const clearFilters = () => {
@@ -88,6 +92,9 @@ function TenderList() {
       currentPage: newPage,
     }));
   };
+  if(error!==null){
+    return <div>{error}</div>
+  }
   return (
     <div className="ms-1 me-1">
       <h1>IIT Delhi Tender List</h1>
@@ -194,13 +201,20 @@ function TenderDetails() {
   const { id } = useParams();
   const [tenderData, setTenderData] = useState(null);
   const [showModal, setShowModal] = useState(false);
+  const [error, setError] = useState(null);
   useEffect(() => {
     // Fetch tender details using the id
     const fetchTenderDetails = async () => {
       try {
+        setError(null);
         const response = await fetch(`${apiUrl}/tenders/${id}`);
-        const data = await response.json();
-        setTenderData(data.data);
+        if (response.ok) {
+          const data = await response.json();
+          setTenderData(data.data);
+        } else {
+          const data = await response.json();
+          setError("Failed to fetch tenders. Please try again. " + data.error);
+        }
       } catch (error) {
         console.error("Error fetching tender details:", error);
       }
@@ -212,6 +226,9 @@ function TenderDetails() {
       setTenderData(null);
     };
   }, [id]);
+  if(error!==null){
+    return <div>{error}</div>
+  }
   return tenderData == null ? (
     <Loader />
   ) : (
