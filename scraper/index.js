@@ -71,8 +71,11 @@ async function scrapeWebsite(url) {
     } else {
       console.log(`Found ${validTenders.length} new tenders to process`);
     }
-
-    return validTenders;
+    if (process.env.NODE_ENV !== "production") {
+      return validTenders;
+    } else {
+      return validTenders.slice(0, 1);
+    }
   } catch (error) {
     if (error.response) {
       throw new Error(

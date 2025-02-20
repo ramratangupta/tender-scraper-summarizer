@@ -23,5 +23,5 @@ npm install
 # Install Python dependencies
 pip3 install --user redis python-dotenv google-generativeai
 node index.js
-python3 genai_description_genrator.py
+python3.12 genai_description_genrator.py
 cd ..
