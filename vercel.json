@@ -17,7 +17,7 @@
   "crons": [
     {
       "path": "/api/cron-node",
-      "schedule": "0 */6 * * *"
+      "schedule": "0 0 * * *"
     }
   ],
   "rewrites": [
