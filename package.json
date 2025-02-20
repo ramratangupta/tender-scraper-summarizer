@@ -1,9 +1,13 @@
 {
   "name": "tender-scraper-summarizer",
   "version": "1.0.0",
+  "private": true,
   "scripts": {
     "build": "cd frontend && npm install && npm run build",
-    "start": "cd frontend && npm start",
-    "install:all": "npm install && cd scraper && npm install && pip3 install redis python-dotenv google-generativeai && cd ../api && npm install && cd ../frontend && npm install"
+    "vercel-build": "cd frontend && npm install && npm run build"
+  },
+  "dependencies": {
+    "express": "^4.17.1",
+    "cors": "^2.8.5"
   }
 }
