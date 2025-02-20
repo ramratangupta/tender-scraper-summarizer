@@ -71,11 +71,8 @@ async function scrapeWebsite(url) {
     } else {
       console.log(`Found ${validTenders.length} new tenders to process`);
     }
-    if (process.env.NODE_ENV !== "production") {
-      return validTenders;
-    } else {
-      return validTenders.slice(0, 1);
-    }
+    console.log(process.env.NODE_ENV,"NODE_ENV");
+    return validTenders.slice(0, 1);
   } catch (error) {
     if (error.response) {
       throw new Error(
