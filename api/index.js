@@ -11,16 +11,42 @@ app.use(express.json());
 
 // Redis connection
 const redis = await createClient({
-  url: process.env.REDISCON
+  url: process.env.REDIS_URL,
 })
-  .on('error', err => console.log('Redis Client Error', err))
+  .on("error", (err) => console.log("Redis Client Error", err))
   .connect();
 
 // Convert Express app to Vercel serverless function
 export default async function handler(req, res) {
+  // Add this to handle Vercel's request format
   if (!req.url) {
     req.url = "/";
   }
+
+  // Add proper error handling for Redis connection
+  try {
+    if (!redis.isOpen) {
+      await redis.connect();
+    }
+  } catch (error) {
+    console.error("Redis connection error:", error);
+    return res.status(500).json({
+      success: false,
+      error: "Database connection error",
+    });
+  }
+
+  // Handle cleanup on Vercel
+  res.on("finish", async () => {
+    try {
+      if (redis.isOpen) {
+        await redis.quit();
+      }
+    } catch (error) {
+      console.error("Error closing Redis connection:", error);
+    }
+  });
+
   return app(req, res);
 }
 
@@ -43,7 +69,7 @@ app.get("/api/tenders", async (req, res) => {
       if (!tender || Object.keys(tender).length === 0) {
         return res.status(404).json({
           success: false,
-          error: "Tender not found"
+          error: "Tender not found",
         });
       }
       return res.json({
@@ -63,26 +89,30 @@ app.get("/api/tenders", async (req, res) => {
     if (startDate && endDate) {
       const startTimestamp = Math.floor(new Date(startDate).getTime() / 1000);
       const endTimestamp = Math.floor(new Date(endDate).getTime() / 1000);
-      tenderIds = await redis.zRangeByScore('tenders:by:date', startTimestamp, endTimestamp);
+      tenderIds = await redis.zRangeByScore(
+        "tenders:by:date",
+        startTimestamp,
+        endTimestamp
+      );
     } else {
-      tenderIds = await redis.zRange('tenders:by:date', 0, -1, 'REV');
+      tenderIds = await redis.zRange("tenders:by:date", 0, -1, "REV");
     }
 
     // Fetch all tenders data
-    const tenderPromises = tenderIds.map(id => redis.hGetAll(`tender:${id}`));
+    const tenderPromises = tenderIds.map((id) => redis.hGetAll(`tender:${id}`));
     let tenders = await Promise.all(tenderPromises);
-    
+
     // Filter out empty results
-    tenders = tenders.filter(tender => Object.keys(tender).length > 0);
+    tenders = tenders.filter((tender) => Object.keys(tender).length > 0);
 
     // Apply keyword filter if provided
     if (keywords) {
-      const searchTerms = keywords.toLowerCase().split(' ');
-      tenders = tenders.filter(tender =>
-        searchTerms.some(term =>
-          (tender.title?.toLowerCase().includes(term) ||
-          
-           tender.aiml_summary?.toLowerCase().includes(term) )
+      const searchTerms = keywords.toLowerCase().split(" ");
+      tenders = tenders.filter((tender) =>
+        searchTerms.some(
+          (term) =>
+            tender.title?.toLowerCase().includes(term) ||
+            tender.aiml_summary?.toLowerCase().includes(term)
         )
       );
     }
@@ -101,7 +131,6 @@ app.get("/api/tenders", async (req, res) => {
         itemsPerPage: parseInt(limit),
       },
     });
-
   } catch (error) {
     console.error("Error fetching tenders:", error);
     res.status(500).json({
@@ -136,20 +165,27 @@ app.get("/api/tenders/:id", async (req, res) => {
   }
 });
 
-const PORT = process.env.PORT || 2900;
-app.listen(PORT, () => {
-  console.log(`Server running on port ${PORT}`);
-});
+// Only start the server if running locally (not on Vercel)
+if (process.env.NODE_ENV !== "production") {
+  const PORT = process.env.PORT || 2900;
+  app.listen(PORT, () => {
+    console.log(`Server running on port ${PORT}`);
+  });
+}
 
-// Graceful shutdown
-process.on('SIGTERM', async () => {
-  console.log('SIGTERM received. Closing Redis connection...');
-  await redis.quit();
+// Graceful shutdown handlers
+process.on("SIGTERM", async () => {
+  console.log("SIGTERM received. Closing Redis connection...");
+  if (redis.isOpen) {
+    await redis.quit();
+  }
   process.exit(0);
 });
 
-process.on('SIGINT', async () => {
-  console.log('SIGINT received. Closing Redis connection...');
-  await redis.quit();
+process.on("SIGINT", async () => {
+  console.log("SIGINT received. Closing Redis connection...");
+  if (redis.isOpen) {
+    await redis.quit();
+  }
   process.exit(0);
 });

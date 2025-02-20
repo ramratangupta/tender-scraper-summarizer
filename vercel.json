@@ -4,11 +4,30 @@
     {
       "src": "frontend/package.json",
       "use": "@vercel/static-build",
-      "config": { "distDir": "build" }
+      "config": { 
+        "distDir": "build",
+        "buildCommand": "npm run build"
+      }
     },
     {
       "src": "api/index.js",
       "use": "@vercel/node"
+    }
+  ],
+  "crons": [
+    {
+      "path": "/api/cron-node",
+      "schedule": "0 */6 * * *"
+    }
+  ],
+  "rewrites": [
+    {
+      "source": "/api/tenders/:id",
+      "destination": "/api/index"
+    },
+    {
+      "source": "/api/tenders",
+      "destination": "/api/index"
     }
   ],
   "routes": [
@@ -17,8 +36,11 @@
       "dest": "/api/index.js"
     },
     {
+      "handle": "filesystem"
+    },
+    {
       "src": "/(.*)",
-      "dest": "/frontend/$1"
+      "dest": "/frontend/build/$1"
     }
   ]
 }

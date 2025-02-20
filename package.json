@@ -1,11 +1,10 @@
 {
   "name": "tender-scraper-summarizer",
   "version": "1.0.0",
-  "main": "index.js",
   "scripts": {
-    "api": "cd api && npm run dev",
-    "frontend": "cd frontend && npm start",
-    "install:all": "npm install && cd scraper && npm install && cd ../api && npm install && cd ../frontend && npm install"
+    "start": "cd api && npm install && node index.js",
+    "build": "cd frontend && npm install && npm run build",
+    "install:all": "npm install && cd scraper && npm install && pip3 install redis python-dotenv google-generativeai && cd ../api && npm install && cd ../frontend && npm install"
   },
   "keywords": [],
   "author": "",

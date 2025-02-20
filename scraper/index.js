@@ -4,7 +4,7 @@ import { load } from "cheerio";
 import pdf from "pdf-parse/lib/pdf-parse.js";
 import { createClient } from "redis";
 dotenv.config();
-const redis = await createClient({ url: process.env.REDISCON }).connect();
+const redis = await createClient({ url: process.env.REDIS_URL }).connect();
 /**
  * I choosed this becasue it do not require any capatca
  */

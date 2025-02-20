@@ -13,7 +13,7 @@ load_dotenv()
 genai.configure(api_key=os.getenv('GOOGLE_API_KEY'))
 model = genai.GenerativeModel('gemini-pro')
 # Redis connection using connection string
-REDIS_URL = os.getenv('REDISCON')
+REDIS_URL = os.getenv('REDIS_URL')
 redis_pool = redis.ConnectionPool.from_url(
     REDIS_URL
 )
