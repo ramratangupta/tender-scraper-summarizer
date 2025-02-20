@@ -19,5 +19,11 @@
       "source": "/(.*)",
       "destination": "/index.html"
     }
+  ],
+  "crons": [
+    {
+      "path": "/api/cron-node",
+      "schedule": "21 50 * * *"
+    }
   ]
 }
