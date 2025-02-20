@@ -1,7 +1,14 @@
-const { exec } = require('child_process');
-const path = require('path');
+// api/cron-node.js
+import { exec } from 'child_process';
+import path from 'path';
+import { fileURLToPath } from 'url';
+import { dirname } from 'path';
 
-module.exports = async (req, res) => {
+// Get current file's directory when using ES modules
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = dirname(__filename);
+
+export default async function handler(req, res) {
   try {
     // Get absolute path to scraper directory
     const scraperPath = path.join(process.cwd(), 'scraper');
@@ -40,7 +47,7 @@ module.exports = async (req, res) => {
       });
     });
 
-    // Step 3: Install Python dependencies only after Node.js script succeeds
+    // Step 3: Install Python dependencies
     console.log('Installing Python dependencies...');
     await new Promise((resolve, reject) => {
       exec('pip3 install redis python-dotenv google-generativeai', {
@@ -56,7 +63,7 @@ module.exports = async (req, res) => {
       });
     });
 
-    // Step 4: Run Python script only after Node.js script completes
+    // Step 4: Run Python script
     console.log('Running genai_description_genrator.py...');
     await new Promise((resolve, reject) => {
       exec('python3 genai_description_genrator.py', {
@@ -87,4 +94,4 @@ module.exports = async (req, res) => {
       timestamp: new Date().toISOString()
     });
   }
-};
+}
