@@ -22,7 +22,7 @@
   ],
   "functions": {
     "api/cron-node.js": {
-      "maxDuration": 2700
+      "maxDuration": 60
     }
   },
   "crons": [
