@@ -1,6 +1,6 @@
 {
   "version": 2,
-  "buildCommand": "cd frontend && npm install && npm run build",
+  "buildCommand": "./build.sh",
   "outputDirectory": "frontend/build",
   "rewrites": [
     {
@@ -22,8 +22,7 @@
   ],
   "functions": {
     "api/cron-node.js": {
-      "memory": 1024,
-      "maxDuration": 300
+      "maxDuration": 2700
     }
   },
   "crons": [
@@ -31,13 +30,5 @@
       "path": "/api/cron-node",
       "schedule": "0 2 * * *"
     }
-  ],
-  "build": {
-    "env": {
-      "PYTHON_VERSION": "3.9"
-    }
-  },
-  "scripts": {
-    "build": "./build.sh"
-  }
+  ]
 }
