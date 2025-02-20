@@ -28,19 +28,14 @@
     {
       "source": "/api/tenders",
       "destination": "/api/index"
-    }
-  ],
-  "routes": [
-    {
-      "src": "/api/(.*)",
-      "dest": "/api/index.js"
     },
     {
-      "handle": "filesystem"
+      "source": "/api/(.*)",
+      "destination": "/api/index"
     },
     {
-      "src": "/(.*)",
-      "dest": "/frontend/build/$1"
+      "source": "/(.*)",
+      "destination": "/frontend/build/$1"
     }
   ]
 }
