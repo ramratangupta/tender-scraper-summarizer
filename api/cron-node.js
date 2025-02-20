@@ -4,38 +4,38 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 import { dirname } from 'path';
 
-// Get current file's directory when using ES modules
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 
 export default async function handler(req, res) {
   try {
-    // Get absolute path to scraper directory
-    const scraperPath = path.join(process.cwd(), 'scraper');
+    // Use /tmp directory for temporary operations
+    const scraperPath = '/tmp/scraper';
     
     console.log('Starting cron job execution...');
 
-    // Step 1: Install Node.js dependencies
-    console.log('Installing Node.js dependencies...');
+    // Create temp directory and copy files
+    console.log('Setting up temporary directory...');
     await new Promise((resolve, reject) => {
-      exec('npm install', {
-        cwd: scraperPath
-      }, (error, stdout, stderr) => {
+      exec(`mkdir -p ${scraperPath} && cp -r ${path.join(process.cwd(), 'scraper')}/* ${scraperPath}/`, (error, stdout, stderr) => {
         if (error) {
-          console.error('Failed to install Node.js dependencies:', error);
+          console.error('Failed to setup directory:', error);
           reject(error);
         } else {
-          console.log('Node.js dependencies installed successfully');
           resolve(stdout);
         }
       });
     });
 
-    // Step 2: Run scraper/index.js first
+    // Step 1: Run scraper/index.js directly (assuming dependencies are pre-installed)
     console.log('Running scraper/index.js...');
     await new Promise((resolve, reject) => {
       exec('node index.js', {
-        cwd: scraperPath
+        cwd: scraperPath,
+        env: {
+          ...process.env,
+          PATH: process.env.PATH
+        }
       }, (error, stdout, stderr) => {
         if (error) {
           console.error('Node Scraper Error:', error);
@@ -47,27 +47,16 @@ export default async function handler(req, res) {
       });
     });
 
-    // Step 3: Install Python dependencies
-    console.log('Installing Python dependencies...');
-    await new Promise((resolve, reject) => {
-      exec('pip3 install redis python-dotenv google-generativeai', {
-        cwd: scraperPath
-      }, (error, stdout, stderr) => {
-        if (error) {
-          console.error('Failed to install Python dependencies:', error);
-          reject(error);
-        } else {
-          console.log('Python dependencies installed successfully');
-          resolve(stdout);
-        }
-      });
-    });
-
-    // Step 4: Run Python script
+    // Step 2: Run Python script (assuming dependencies are pre-installed)
     console.log('Running genai_description_genrator.py...');
     await new Promise((resolve, reject) => {
       exec('python3 genai_description_genrator.py', {
-        cwd: scraperPath
+        cwd: scraperPath,
+        env: {
+          ...process.env,
+          PATH: process.env.PATH,
+          PYTHONPATH: process.env.PYTHONPATH
+        }
       }, (error, stdout, stderr) => {
         if (error) {
           console.error('Python Script Error:', error);
@@ -79,11 +68,16 @@ export default async function handler(req, res) {
       });
     });
 
+    // Cleanup
+    await new Promise((resolve) => {
+      exec(`rm -rf ${scraperPath}`, () => resolve());
+    });
+
     console.log('All tasks completed successfully');
 
     res.status(200).json({ 
       success: true,
-      message: 'Sequential execution completed successfully: index.js → genai_description_genrator.py',
+      message: 'Sequential execution completed successfully',
       timestamp: new Date().toISOString()
     });
   } catch (error) {

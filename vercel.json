@@ -20,10 +20,24 @@
       "destination": "/index.html"
     }
   ],
+  "functions": {
+    "api/cron-node.js": {
+      "memory": 1024,
+      "maxDuration": 300
+    }
+  },
   "crons": [
     {
       "path": "/api/cron-node",
-      "schedule": "50 21 * * *"
+      "schedule": "0 2 * * *"
     }
-  ]
+  ],
+  "build": {
+    "env": {
+      "PYTHON_VERSION": "3.9"
+    }
+  },
+  "scripts": {
+    "build": "./build.sh"
+  }
 }
