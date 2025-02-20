@@ -23,7 +23,7 @@ npm install
 # Install Python dependencies
 pip3 install --user redis python-dotenv google-generativeai
 node index.js
-which python3
 python3 genai_description_genrator.py
+node redis.js
 cd ..
-redis-cli -u $REDIS_URL KEYS '*'
+
