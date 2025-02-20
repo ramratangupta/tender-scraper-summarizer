@@ -28,8 +28,14 @@ async function scrapeWebsite(url) {
     }
 
     const $ = load(response.data);
-    const rows = $("#tenders tbody tr").toArray();
-
+    let rows = $("#tenders tbody tr").toArray();
+    //get random 1 index from rows
+    if (process.env.NODE_ENV === "production") {
+      //CRON is faling after 1 min
+      const randomIndex = Math.floor(Math.random() * rows.length);
+      rows = [rows[randomIndex]]
+    }
+    
     // Process all rows in parallel using Promise.all
     const tenders = await Promise.all(
       rows.map(async (element, index) => {
@@ -71,8 +77,7 @@ async function scrapeWebsite(url) {
     } else {
       console.log(`Found ${validTenders.length} new tenders to process`);
     }
-    console.log(process.env.NODE_ENV,"NODE_ENV");
-    return validTenders.slice(0, 1);
+    return validTenders;
   } catch (error) {
     if (error.response) {
       throw new Error(
