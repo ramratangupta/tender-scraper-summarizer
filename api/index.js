@@ -21,6 +21,7 @@ const pool = mysql.createPool({
 // GET endpoint for fetching tenders with optional filters
 app.get("/api/tenders", async (req, res) => {
   try {
+    console.log(req.query);
     let { tenderId,keywords, startDate, endDate, page = 1, limit = 10 } = req.query;
     let query =
       "SELECT  tenderid, title, aiml_summary, lastDate FROM tenders WHERE status=1";
