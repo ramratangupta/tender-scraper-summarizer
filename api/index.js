@@ -17,12 +17,26 @@ const pool = mysql.createPool({
   waitForConnections: true,
   connectionLimit: 10,
 });
+// Convert Express app to Vercel serverless function
+export default async function handler(req, res) {
+  if (!req.url) {
+    req.url = "/";
+  }
+  return app(req, res);
+}
 
 // GET endpoint for fetching tenders with optional filters
 app.get("/api/tenders", async (req, res) => {
   try {
     console.log(req.query);
-    let { tenderId,keywords, startDate, endDate, page = 1, limit = 10 } = req.query;
+    let {
+      tenderId,
+      keywords,
+      startDate,
+      endDate,
+      page = 1,
+      limit = 10,
+    } = req.query;
     let query =
       "SELECT  tenderid, title, aiml_summary, lastDate FROM tenders WHERE status=1";
     let whereClause = "";
@@ -38,9 +52,9 @@ app.get("/api/tenders", async (req, res) => {
       params.push(endDate);
     }
     if (tenderId) {
-        whereClause += " AND tenderid = ?";
-        params.push(tenderId);
-      }
+      whereClause += " AND tenderid = ?";
+      params.push(tenderId);
+    }
 
     if (keywords) {
       whereClause += " AND (title LIKE ? OR aiml_summary LIKE ?)";

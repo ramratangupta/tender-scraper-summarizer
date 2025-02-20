@@ -8,6 +8,7 @@ import {
 } from "react-router-dom";
 import "bootstrap/dist/css/bootstrap.min.css";
 import { Modal, Button } from "react-bootstrap";
+const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:2900/api';
 function TenderList() {
   const [list, setList] = useState([]);
   const [loading, setLoading] = useState(false);
@@ -35,7 +36,7 @@ function TenderList() {
       if (pagination.currentPage) params.append("page", pagination.currentPage);
 
       const response = await fetch(
-        `http://localhost:2900/api/tenders?${params.toString()}`
+        `${apiUrl}/tenders?${params.toString()}`
       );
       const data = await response.json();
       setList(data.data);
@@ -198,7 +199,7 @@ function TenderDetails() {
     // Fetch tender details using the id
     const fetchTenderDetails = async () => {
       try {
-        const response = await fetch(`http://localhost:2900/api/tenders/${id}`);
+        const response = await fetch(`${apiUrl}/tenders/${id}`);
         const data = await response.json();
         setTenderData(data.data);
       } catch (error) {
