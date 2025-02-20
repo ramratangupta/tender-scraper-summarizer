@@ -8,7 +8,7 @@ import {
 } from "react-router-dom";
 import "bootstrap/dist/css/bootstrap.min.css";
 import { Modal, Button } from "react-bootstrap";
-const apiUrl = process.env.REACT_APP_API_URL || 'http://localhost:2900/api';
+const apiUrl = process.env.REACT_APP_API_URL || "http://localhost:2900/api";
 function TenderList() {
   const [list, setList] = useState([]);
   const [loading, setLoading] = useState(false);
@@ -35,9 +35,7 @@ function TenderList() {
       if (filters.tenderId) params.append("tenderId", filters.tenderId);
       if (pagination.currentPage) params.append("page", pagination.currentPage);
 
-      const response = await fetch(
-        `${apiUrl}/tenders?${params.toString()}`
-      );
+      const response = await fetch(`${apiUrl}/tenders?${params.toString()}`);
       const data = await response.json();
       setList(data.data);
       setPagination(data.pagination);
@@ -58,11 +56,21 @@ function TenderList() {
     }));
   };
 
-  // Effect to trigger API call when filters change
+  // Effect for initial load
   useEffect(() => {
-    const timeoutId = setTimeout(() => fetchTenders(), 1000);
+    fetchTenders();
+
+  }, [fetchTenders]); // Empty dependency array for initial load only
+
+  // Effect for filter changes with debounce
+  useEffect(() => {
+    const timeoutId = setTimeout(() => {
+      // Only fetch if there are filter values
+      fetchTenders();
+    }, 1000);
+
     return () => clearTimeout(timeoutId);
-  }, [filters, pagination.currentPage]);
+  }, [fetchTenders,filters,pagination.currentPage]);
 
   // Function to clear all filters
   const clearFilters = () => {
@@ -73,15 +81,6 @@ function TenderList() {
       endDate: "",
     });
   };
-
-  useEffect(() => {
-    fetchTenders();
-    return () => {
-      console.log("unmounting");
-      setList([]);
-      setPagination({});
-    };
-  }, []);
   const handlePageChange = (newPage) => {
     // Update your existing pagination state
     setPagination((prev) => ({
@@ -362,7 +361,11 @@ const PaginationControls = ({ pagination, onPageChange }) => {
     <nav aria-label="Tender pagination" className="mt-4">
       <ul className="pagination justify-content-center">
         {/* Previous Button */}
-        <li className={`page-item ${currentPage === 1 || totalPages==0 ? "disabled" : ""}`}>
+        <li
+          className={`page-item ${
+            currentPage === 1 || totalPages === 0 ? "disabled" : ""
+          }`}
+        >
           <button
             className="page-link"
             onClick={handlePrevious}
@@ -387,7 +390,7 @@ const PaginationControls = ({ pagination, onPageChange }) => {
         {/* Next Button */}
         <li
           className={`page-item ${
-            currentPage === totalPages || totalPages==0 ? "disabled" : ""
+            currentPage === totalPages || totalPages === 0 ? "disabled" : ""
           }`}
         >
           <button
