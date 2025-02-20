@@ -42,6 +42,8 @@ function TenderList() {
         setPagination(data.pagination);
       } else {
         const data = await response.json();
+        setList([]);
+        setPagination({ currentPage: 1, totalPages: 0, itemsPerPage: 10 });
         setError("Failed to fetch tenders. Please try again. " + data.error);
       }
     } catch (err) {
@@ -92,9 +94,7 @@ function TenderList() {
       currentPage: newPage,
     }));
   };
-  if(error!==null){
-    return <div>{error}</div>
-  }
+
   return (
     <div className="ms-1 me-1">
       <h1>IIT Delhi Tender List</h1>
@@ -226,8 +226,8 @@ function TenderDetails() {
       setTenderData(null);
     };
   }, [id]);
-  if(error!==null){
-    return <div>{error}</div>
+  if (error !== null) {
+    return <div>{error}</div>;
   }
   return tenderData == null ? (
     <Loader />

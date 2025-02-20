@@ -1,4 +1,4 @@
-import mysql.connector
+import redis
 import time
 import google.generativeai as genai
 from datetime import datetime
@@ -6,40 +6,33 @@ import os
 from dotenv import load_dotenv
 import re
 import json
-#pip3 install mysql-connector-python python-dotenv google-generativeai
+from contextlib import contextmanager
+#pip3 install redis python-dotenv google-generativeai
 # Load environment variables
 load_dotenv()
 genai.configure(api_key=os.getenv('GOOGLE_API_KEY'))
 model = genai.GenerativeModel('gemini-pro')
+# Redis connection using connection string
+REDIS_URL = os.getenv('REDISCON')
+redis_pool = redis.ConnectionPool.from_url(
+    REDIS_URL
+)
 
-# Database configuration
-db_config = {
-    'host': os.getenv('DB_HOST'),
-    'user': os.getenv('DB_USER'),
-    'password': os.getenv('DB_PASSWORD'),
-    'database': os.getenv('DB_NAME')
-}
+@contextmanager
+def get_redis_connection():
+    connection = redis.Redis(connection_pool=redis_pool)
+    try:
+        yield connection
+    finally:
+        connection.close()
 
-def connect_to_database():
-    try:
-        connection = mysql.connector.connect(**db_config)
-        return connection
-    except mysql.connector.Error as error:
-        print(error)
-        return None
-def get_unprocessed_tenders(connection):
-    try:
-        cursor = connection.cursor(dictionary=True)
-        query = """
-            SELECT tenderid, raw_description FROM tenders WHERE status = 0
-        """
-        cursor.execute(query)
-        tenders = cursor.fetchall()
-        cursor.close()
-        return tenders
-    except mysql.connector.Error as error:
-        print(error)
-        return []
+def get_unprocessed_tenders():
+    with get_redis_connection() as redis_client:
+        try:
+            return redis_client.keys("queue_tender_*")
+        except Error as error:
+            print(error)
+            return []
 
 def normalize_newlines(text):
     # First normalize all newlines to \n
@@ -93,8 +86,8 @@ def callGenAI(textPromt):
 def delay_execution(sleepseconds=30):
     print(f"Waiting {sleepseconds} seconds before next processing...")
     time.sleep(sleepseconds)
-def generate_summary(tender):
-    textPromt = normalize_newlines(tender["raw_description"])
+def generate_summary(raw_description):
+    textPromt = normalize_newlines(raw_description)
     chunks = createChunks(textPromt)
     if len(chunks) == 1:
         delay_execution()
@@ -161,82 +154,83 @@ def generate_summary(tender):
         print(e)
         return None
 
-def update_tender_summary(tender_id, summary):
-    try:
-        connection = connect_to_database()  
-        json_summary = json.loads(summary)            
-        # Handle each field with null checks and default values
-        formatted_summary = ""
-        formatted_requirments = ""
-        formatted_emails = ""
-        formatted_phones = ""
-        if json_summary.get("summary"):
-            #print(json_summary["summary"])
-            formatted_summary = json_summary["summary"]
+def update_tender_summary(tender, summary):
+    with get_redis_connection() as redis_client:
+        try:
+            json_summary = json.loads(summary)
+            pipe = redis_client.pipeline()
+            # Handle each field with null checks and default values
+            formatted_summary = ""
+            formatted_requirments = ""
+            formatted_emails = ""
+            formatted_phones = ""
+            if json_summary.get("summary"):
+                #print(json_summary["summary"])
+                formatted_summary = json_summary["summary"]
+            
+            if json_summary.get("email"):
+                formatted_emails = json_summary["email"]
+            
+            # Handle list fields
+            if json_summary.get("phone"):
+                phones = json_summary["phone"]
+                #print(json_summary["phone"])
+                if isinstance(phones, list):
+                    formatted_phones = ",".join(filter(None, phones))
+                else:
+                    formatted_phones = phones
+            if json_summary.get("requirements"):
+                #print(json_summary["requirements"])
+                requirements = json_summary["requirements"]
+                if isinstance(requirements, list):
+                    formatted_requirments = "\n".join(filter(None, requirements))
+                else:
+                    formatted_requirments = requirements
+            tender["aiml_summary"]=formatted_summary
+            tender["email"]=formatted_emails
+            tender["phone"]=formatted_phones
+            tender["requirements"]=formatted_requirments
+            pipe.hset(f"tender:{tender['tenderid']}", mapping=tender)
+            if 'lastDate' in tender:
+                try:
+                    timestamp = int(datetime.strptime(tender['lastDate'], '%Y-%m-%d').timestamp())
+                    pipe.zadd('tenders:by:date', {tender['tenderid']: timestamp})
+                except (ValueError, TypeError) as e:
+                    print(f"Date conversion error for tender {tender['tenderid']}: {e}")
+            pipe.execute()
         
-        if json_summary.get("email"):
-            formatted_emails = json_summary["email"]
-        
-        # Handle list fields
-        if json_summary.get("phone"):
-            phones = json_summary["phone"]
-            #print(json_summary["phone"])
-            if isinstance(phones, list):
-                formatted_phones = ",".join(filter(None, phones))
-            else:
-                formatted_phones = phones
-        if json_summary.get("requirements"):
-            #print(json_summary["requirements"])
-            requirements = json_summary["requirements"]
-            if isinstance(requirements, list):
-                formatted_requirments = "\n".join(filter(None, requirements))
-            else:
-                formatted_requirments = requirements
-        cursor = connection.cursor()
-        update_query = """
-            UPDATE tenders 
-            SET aiml_summary = %s, status = 1, email = %s, phone = %s, requirements = %s
-            WHERE tenderid = %s
-        """
-        cursor.execute(update_query, (formatted_summary, formatted_emails, formatted_phones, formatted_requirments, tender_id))
-        connection.commit()
-        cursor.close()
-        return True
-    except mysql.connector.Error as error:
-        print(error)
-        connection.close()
-        return False
+            return True
+        except Error as error:
+            print(error)
+            return False
 
 def process_tenders():
-    connection = connect_to_database()
-    if not connection:
-        return
-    
-    try:
-        # Get all unprocessed tenders
-        tenders = get_unprocessed_tenders(connection)
-        connection.close()
-        print("Found unprocessed tenders",len(tenders))
-        
-        for tender in tenders:
-            print("Processing tender ID: ",tender['tenderid'])
+    with get_redis_connection() as redis_client:
+        try:
+            # Get all unprocessed tenders
+            tenders = get_unprocessed_tenders()
+            print("Found unprocessed tenders",len(tenders))
             
-            # Generate summary using Gemini
-            summary = generate_summary(tender)
-            
-            if summary:
-                # Update the tender with the generated summary
-                if update_tender_summary(tender['tenderid'], summary):
-                    print("Successfully processed tender")
-                else:
-                    print("Failed to update tender")
-            
-            # Wait for 30 seconds before processing the next tender
-            
-    except Exception as e:
-        print(e)
-    finally:
-        connection.close()
+            for redisKey in tenders:
+                tender = json.loads(redis_client.get(redisKey).decode('utf-8'))
+                print("Processing tender ID: ",tender['tenderid'])
+                
+                # Generate summary using Gemini
+                summary = generate_summary(tender['raw_description'])
+                
+                if summary:
+                    # Update the tender with the generated summary
+                    if update_tender_summary(tender, summary):
+                        print("Successfully processed tender")
+                        # Remove the tender from the queue
+                        redis_client.delete(redisKey)
+                    else:
+                        print("Failed to update tender")
+                
+                # Wait for 30 seconds before processing the next tender
+                
+        except Exception as e:
+            print(e)
 
 if __name__ == "__main__":
     print("Starting tender processing...")

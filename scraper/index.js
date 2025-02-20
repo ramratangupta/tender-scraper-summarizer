@@ -1,19 +1,10 @@
-
 import dotenv from "dotenv";
 import axios from "axios";
 import { load } from "cheerio";
 import pdf from "pdf-parse/lib/pdf-parse.js";
-import mysql from "mysql2/promise";
+import { createClient } from "redis";
 dotenv.config();
-const pool = mysql.createPool({
-  host: process.env.DB_HOST || "localhost",
-  user: process.env.DB_USER,
-  password: process.env.DB_PASSWORD,
-  database: process.env.DB_NAME,
-  waitForConnections: true,
-  connectionLimit: 10,
-  queueLimit: 0,
-});
+const redis = await createClient({ url: process.env.REDISCON }).connect();
 /**
  * I choosed this becasue it do not require any capatca
  */
@@ -52,15 +43,15 @@ async function scrapeWebsite(url) {
         const tenderid = tds.eq(1).text().trim();
 
         try {
-          const checkDB = await checkTenderExtis(tenderid);         
-
+          const checkDB = await checkTenderExtis(tenderid);
+          console.log(`Checking tender ${tenderid} in DB:`);
           // If tender doesn't exist in DB
-          if (checkDB[0].length === 0) {
+          if (checkDB == null) {
             return {
               tenderid: tenderid,
               title: tds.eq(2).text().trim(),
-              lastDate: tds.eq(3).text().trim(),
-              publishDate: tds.eq(4).text().trim(),
+              lastDate: formatDateMYSQL(tds.eq(3).text().trim()),
+              publishDate: formatDateMYSQL(tds.eq(4).text().trim()),
               tenderURL: tenderURL,
             };
           }
@@ -114,34 +105,34 @@ async function downloadPDF(url) {
     throw new Error(`PDF download failed: ${error.message}`);
   }
 }
-const delay = (s,process) => {
+const delay = (s, process) => {
   console.log(`${process} Waiting for ${s} seconds...`);
-  return new Promise(resolve => setTimeout(resolve, s*1000))
+  return new Promise((resolve) => setTimeout(resolve, s * 1000));
 };
 async function processTenders() {
   try {
     const tenders = await scrapeWebsite(targetWebsiteUrl);
     if (!tenders || tenders.length === 0) {
-      throw new Error("No tenders found to process");
+      return [];
     }
     const results = [];
     for (const tender of tenders) {
       try {
-        console.log(`Tender ${tender.tenderid} Starting progress`)
+        console.log(`Tender ${tender.tenderid} Starting progress`);
         const pdfData = await downloadPDF(tender.tenderURL);
         if (!Buffer.isBuffer(pdfData)) {
-          throw new Error('Invalid PDF data format');
+          throw new Error("Invalid PDF data format");
         }
         // Add specific error handling for PDF parsing
-        const data = await pdf(pdfData).catch(error => {
+        const data = await pdf(pdfData).catch((error) => {
           throw new Error(`PDF parsing error: ${error.message}`);
         });
 
         if (!data || !data.text) {
-          throw new Error('PDF parsing resulted in empty data');
+          throw new Error("PDF parsing resulted in empty data");
         }
-        
-        tender.raw_data = data.text;
+
+        tender.raw_description = data.text;
         results.push({
           status: "fulfilled",
           value: tender,
@@ -153,8 +144,7 @@ async function processTenders() {
           reason: error.message,
         });
       }
-      await delay(2,"PDF");
-        
+      await delay(2, "PDF");
     }
 
     // Filter and process results
@@ -182,26 +172,20 @@ function formatDateMYSQL(dateString) {
   return `${year}-${month}-${day}`;
 }
 async function createTender(tenderData) {
-  const sql = `
-    INSERT INTO tenders 
-    (tenderid, title,raw_description, lastDate, publishDate, tenderURL,status) 
-    VALUES ( ?, ?, ?, ?, ?, ?,0)`;
-  const params = [
-    tenderData.tenderid,
-    tenderData.title,
-    tenderData.raw_data,
-    formatDateMYSQL(tenderData.lastDate),
-    formatDateMYSQL(tenderData.publishDate),
-    tenderData.tenderURL
-  ];
-  return pool.query(sql, params);
+  try {
+    return await redis.set(
+      "queue_tender_" + tenderData.tenderid,
+      JSON.stringify(tenderData)
+    );
+  } catch (error) {
+    console.error("Error saving tender to redis:", error);
+    throw error;
+  }
 }
 
 async function checkTenderExtis(tenderid) {
   try {
-    const sql = `select  tenderid from tenders where tenderid =?`;
-    const params = [tenderid];
-    return await pool.query(sql, params);
+    return await redis.get("queue_tender_" + tenderid);
   } catch (error) {
     console.error("Error checking database:", error);
     throw error;
@@ -226,4 +210,8 @@ processTenders()
       console.log("No tenders to process");
     }
   })
-  .catch((error) => console.error("Application error:", error));
+  .catch((error) => console.error("Application error:", error))
+  .finally(() => {
+    redis.quit();
+    process.exit();
+  });
