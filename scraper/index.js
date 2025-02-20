@@ -81,7 +81,7 @@ async function scrapeWebsite(url) {
       console.log(`Found ${validTenders.length} new tenders to process`);
     }
 
-    return [validTenders[1]];
+    return validTenders;
   } catch (error) {
     if (error.response) {
       throw new Error(
@@ -129,7 +129,18 @@ async function processTenders() {
       try {
         console.log(`Tender ${tender.tenderid} Starting progress`)
         const pdfData = await downloadPDF(tender.tenderURL);
-        const data = await pdf(pdfData);
+        if (!Buffer.isBuffer(pdfData)) {
+          throw new Error('Invalid PDF data format');
+        }
+        // Add specific error handling for PDF parsing
+        const data = await pdf(pdfData).catch(error => {
+          throw new Error(`PDF parsing error: ${error.message}`);
+        });
+
+        if (!data || !data.text) {
+          throw new Error('PDF parsing resulted in empty data');
+        }
+        
         tender.raw_data = data.text;
         results.push({
           status: "fulfilled",
