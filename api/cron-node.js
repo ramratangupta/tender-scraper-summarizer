@@ -18,12 +18,7 @@ export default async function handler(req, res) {
     console.log('Running scraper/index.js...');
     await new Promise((resolve, reject) => {
       exec(`/var/lang/bin/node index.js`, {
-        cwd: scraperPath,
-        shell: '/bin/bash',
-        env: {
-          ...process.env,
-          PATH: '/var/lang/bin:/usr/local/bin:/usr/bin:/bin:/opt/bin'
-        }
+        cwd: scraperPath
       }, (error, stdout, stderr) => {
         if (error) {
           console.error('Node Scraper Error:', error);
@@ -40,14 +35,7 @@ export default async function handler(req, res) {
     console.log('Running genai_description_genrator.py...');
     await new Promise((resolve, reject) => {
       exec(`/usr/local/bin/python3 genai_description_genrator.py`, {
-        cwd: scraperPath,
-        shell: '/bin/bash',
-        env: {
-          ...process.env,
-          PATH: '/var/lang/bin:/usr/local/bin:/usr/bin:/bin:/opt/bin',
-          PYTHONPATH: process.env.PYTHONPATH || '',
-          PYTHONUNBUFFERED: '1'
-        }
+        cwd: scraperPath
       }, (error, stdout, stderr) => {
         if (error) {
           console.error('Python Script Error:', error);
