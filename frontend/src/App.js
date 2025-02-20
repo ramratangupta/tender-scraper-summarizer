@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useCallback } from "react";
 import {
   BrowserRouter,
   Routes,
@@ -20,7 +20,7 @@ function TenderList() {
     endDate: "",
   });
 
-  const fetchTenders = async () => {
+  const fetchTenders = useCallback(async () => {
     try {
       setLoading(true);
       setError(null);
@@ -32,6 +32,7 @@ function TenderList() {
       if (filters.startDate) params.append("startDate", filters.startDate);
       if (filters.endDate) params.append("endDate", filters.endDate);
       if (filters.tenderId) params.append("tenderId", filters.tenderId);
+      if (pagination.currentPage) params.append("page", pagination.currentPage);
 
       const response = await fetch(
         `http://localhost:2900/api/tenders?${params.toString()}`
@@ -45,19 +46,7 @@ function TenderList() {
     } finally {
       setLoading(false);
     }
-  };
-
-  // Debounce function to prevent too many API calls
-  const debounce = (func, delay) => {
-    let timeoutId;
-    return (...args) => {
-      clearTimeout(timeoutId);
-      timeoutId = setTimeout(() => func(...args), delay);
-    };
-  };
-
-  // Debounced version of fetchTenders
-  const debouncedFetch = debounce(fetchTenders, 500);
+  }, [filters, pagination.currentPage]);
 
   // Handle filter changes
   const handleFilterChange = (e) => {
@@ -70,8 +59,9 @@ function TenderList() {
 
   // Effect to trigger API call when filters change
   useEffect(() => {
-    debouncedFetch();
-  }, [filters]);
+    const timeoutId = setTimeout(() => fetchTenders(), 1000);
+    return () => clearTimeout(timeoutId);
+  }, [filters, pagination.currentPage]);
 
   // Function to clear all filters
   const clearFilters = () => {
@@ -91,6 +81,13 @@ function TenderList() {
       setPagination({});
     };
   }, []);
+  const handlePageChange = (newPage) => {
+    // Update your existing pagination state
+    setPagination((prev) => ({
+      ...prev,
+      currentPage: newPage,
+    }));
+  };
   return (
     <div className="ms-1 me-1">
       <h1>IIT Delhi Tender List</h1>
@@ -160,16 +157,20 @@ function TenderList() {
           <span className="float-end">View Details</span>
         </div>
       </div>
+      <PaginationControls
+        pagination={pagination}
+        onPageChange={handlePageChange}
+      />
       {list.map((tender, i) => {
         return (
           <div
-            className={`row p-2 ${i % 2 == 0 ? "text-bg-light" : ""}`}
+            className={`row p-2 ${i % 2 === 0 ? "text-bg-light" : ""}`}
             key={tender.tenderid}
           >
             <div className="col-2">{tender.tenderid}</div>
             <div className="col-2">{tender.title}</div>
             <div className="col-4">{tender.aiml_summary}</div>
-            <div className="col-2">{tender.lastdate}</div>
+            <div className="col-2">{tender.lastDate.split("T")[0]}</div>
             <div className="col-2">
               <Link
                 className="btn btn-primary float-end"
@@ -181,6 +182,10 @@ function TenderList() {
           </div>
         );
       })}
+      <PaginationControls
+        pagination={pagination}
+        onPageChange={handlePageChange}
+      />
     </div>
   );
 }
@@ -257,11 +262,11 @@ function TenderDetails() {
       <div className="row">
         <div className="col">
           <h4>Last Date</h4>
-          <p>{tenderData.lastDate}</p>
+          <p>{tenderData.lastDate.split("T")[0]}</p>
         </div>
         <div className="col">
           <h4>Publish Date</h4>
-          <p>{tenderData.publishDate}</p>
+          <p>{tenderData.publishDate.split("T")[0]}</p>
         </div>
       </div>
       <div className="row">
@@ -323,9 +328,77 @@ function Loader() {
   return (
     <div className="d-flex justify-content-center">
       <div className="spinner-border" role="status">
-        <span className="sr-only">Loading...</span>
+        <span className="sr-only"></span>
       </div>
     </div>
   );
 }
+const PaginationControls = ({ pagination, onPageChange }) => {
+  const { currentPage, totalPages } = pagination;
+
+  const handlePrevious = () => {
+    if (currentPage > 1) {
+      onPageChange(currentPage - 1);
+    }
+  };
+
+  const handleNext = () => {
+    if (currentPage < totalPages) {
+      onPageChange(currentPage + 1);
+    }
+  };
+
+  // Generate page numbers array
+  const getPageNumbers = () => {
+    const pages = [];
+    for (let i = 1; i <= totalPages; i++) {
+      pages.push(i);
+    }
+    return pages;
+  };
+
+  return (
+    <nav aria-label="Tender pagination" className="mt-4">
+      <ul className="pagination justify-content-center">
+        {/* Previous Button */}
+        <li className={`page-item ${currentPage === 1 || totalPages==0 ? "disabled" : ""}`}>
+          <button
+            className="page-link"
+            onClick={handlePrevious}
+            disabled={currentPage === 1}
+          >
+            Previous
+          </button>
+        </li>
+
+        {/* Page Numbers */}
+        {getPageNumbers().map((pageNum) => (
+          <li
+            key={pageNum}
+            className={`page-item ${pageNum === currentPage ? "active" : ""}`}
+          >
+            <button className="page-link" onClick={() => onPageChange(pageNum)}>
+              {pageNum}
+            </button>
+          </li>
+        ))}
+
+        {/* Next Button */}
+        <li
+          className={`page-item ${
+            currentPage === totalPages || totalPages==0 ? "disabled" : ""
+          }`}
+        >
+          <button
+            className="page-link"
+            onClick={handleNext}
+            disabled={currentPage === totalPages}
+          >
+            Next
+          </button>
+        </li>
+      </ul>
+    </nav>
+  );
+};
 export default App;
