@@ -35,9 +35,9 @@ async function scrapeWebsite(url) {
 
     const $ = load(response.data);
     let rows = $("#tenders tbody tr").toArray();
-    if (process.env.NODE_ENV === "production") {
-      rows = rows.slice(0, 1);
-    }
+    // if (process.env.NODE_ENV === "production") {
+    //   rows = rows.slice(0, 1);
+    // }
     const tendersIds = await getTendersIds();
     let existsCount = 0;
     // Process all rows in parallel using Promise.all
@@ -318,9 +318,9 @@ async function callGenAI(textPrompt, callCount = 1) {
 async function generateSummary(rawDescription) {
   const textPrompt = normalizeNewlines(rawDescription);
   const chunks = createChunks(textPrompt);
-  if (process.env.NODE_ENV === "production") {
-    return await callGenAI(chunks[0]);
-  }
+  // if (process.env.NODE_ENV === "production") {
+  //   return await callGenAI(chunks[0]);
+  // }
   if (chunks.length === 1) {
     await delay();
     return await callGenAI(textPrompt);
