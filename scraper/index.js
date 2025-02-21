@@ -3,8 +3,14 @@ import axios from "axios";
 import { load } from "cheerio";
 import pdf from "pdf-parse/lib/pdf-parse.js";
 import { createClient } from "redis";
+import { GoogleGenerativeAI } from "@google/generative-ai";
 dotenv.config();
 const redis = await createClient({ url: process.env.REDIS_URL }).connect();
+
+// Initialize Google AI
+const genAI = new GoogleGenerativeAI(process.env.GOOGLE_API_KEY);
+const model = genAI.getGenerativeModel({ model: "gemini-pro" });
+
 /**
  * I choosed this becasue it do not require any capatca
  */
@@ -56,7 +62,7 @@ async function scrapeWebsite(url) {
           existsCount++;
         }
       } catch (error) {
-        console.error(`Error checking tender ${tenderid}:`, error);
+        console.log(`Error checking tender ${tenderid}:`, error);
       }
 
       return null; // Skip if tender exists or error occurred
@@ -64,7 +70,7 @@ async function scrapeWebsite(url) {
 
     // Filter out null values and empty results
     const validTenders = tenders.filter((tender) => tender !== null);
-    if(existsCount>0){
+    if (existsCount > 0) {
       console.log(`Found ${existsCount} existing tenders`);
     }
     if (validTenders.length === 0) {
@@ -105,7 +111,7 @@ async function downloadPDF(url) {
     throw new Error(`PDF download failed: ${error.message}`);
   }
 }
-const delay = (s, process) => {
+const delay = (s = 30, process = "ML") => {
   console.log(`${process} Waiting for ${s} seconds...`);
   return new Promise((resolve) => setTimeout(resolve, s * 1000));
 };
@@ -138,7 +144,7 @@ async function processTenders() {
           value: tender,
         });
       } catch (error) {
-        console.error(`Error processing tender ${tender.tenderid}:`, error);
+        console.log(`Error processing tender ${tender.tenderid}:`, error);
         results.push({
           status: "rejected",
           reason: error.message,
@@ -157,12 +163,12 @@ async function processTenders() {
       .map((result) => result.reason);
 
     if (failedTenders.length > 0) {
-      console.error("Failed to process some tenders:", failedTenders);
+      console.log("Failed to process some tenders:", failedTenders);
     }
 
     return successfulTenders;
   } catch (error) {
-    console.error("Fatal error:", error);
+    console.log("Fatal error:", error);
     throw error;
   }
 }
@@ -178,7 +184,7 @@ async function createTender(tenderData) {
       JSON.stringify(tenderData)
     );
   } catch (error) {
-    console.error("Error saving tender to redis:", error);
+    console.log("Error saving tender to redis:", error);
     throw error;
   }
 }
@@ -194,23 +200,244 @@ async function getTendersIds() {
         )
     );
   } catch (error) {
-    console.error("Error checking database:", error);
+    console.log("Error checking database:", error);
     throw error;
   }
 }
 try {
-  const tendersTobesaved = await processTenders();
-  for (const tender of tendersTobesaved) {
-    try {
-      await createTender(tender);
-      console.log(`Tender ${tender.tenderid} saved to redis`);
-    } catch (error) {
-      console.error("Error saving tender to redis:", error, tender.tenderid);
+  try {
+    const tendersTobesaved = await processTenders();
+    for (const tender of tendersTobesaved) {
+      try {
+        await createTender(tender);
+        console.log(`Tender ${tender.tenderid} saved to redis`);
+      } catch (error) {
+        console.log("Error saving tender to redis:", error, tender.tenderid);
+      }
     }
+  } catch (e) {
+    console.log("Error processing tenders while create:", e);
+  }
+  try {
+    const tenders = await getUnprocessedTenders();
+    console.log("Found unprocessed tenders:", tenders.length);
+
+    for (const redisKey of tenders) {
+      const tenderData = await redis.get(redisKey);
+      const tender = JSON.parse(tenderData);
+      console.log("ML Processing tender ID:", tender.tenderid);
+      try {
+        const summary = await generateSummary(tender.raw_description);
+        if (summary) {
+          if (await updateTenderSummary(tender, summary)) {
+            console.log("Successfully processed tender");
+            await redis.del(redisKey);
+          } else {
+            console.log("Failed to update tender");
+          }
+        }
+      } catch (error) {
+        console.log("Error processing tender:", error);
+      }
+    }
+  } catch (error) {
+    console.log(error);
   }
 } catch (error) {
-  console.error("Error processing tenders:", error);
+  console.log("Error processing tenders:", error);
 } finally {
   await redis.quit();
   process.exit();
+}
+
+//GenAI for tendor processing
+
+function normalizeNewlines(text) {
+  text = text.replace(/\r\n/g, "\n");
+  text = text.replace(/\r/g, "\n");
+  const lines = text.split("\n");
+  const cleanedLines = lines.map((line) => line.trim());
+  return cleanedLines.join("\n").trim();
+}
+
+function createChunks(text, chunkSize = 50000) {
+  const chunks = [];
+  for (let i = 0; i < text.length; i += chunkSize) {
+    chunks.push(text.slice(i, i + chunkSize));
+  }
+  return chunks;
+}
+
+async function callGenAI(textPrompt) {
+  const jsonFormat = `{
+      "summary": "text here",
+      "email": "email here",
+      "phone": "number1,number2",
+      "requirements": ["req1", "req2"]
+  }`;
+
+  const prompt = `
+  Analyze this tender document and extract the following information in a valid JSON format:
+  1. Brief summary of requirements
+  2. Email
+  3. Phone
+  4. Key Requirements
+
+  Return ONLY the JSON object with no additional text or markdown formatting.
+  Use this exact format:
+  ${jsonFormat}
+
+  Tender text:
+  ${textPrompt}
+  `;
+
+  try {
+    const result = await model.generateContent(prompt);
+    const response = await result.response;
+    return response.text().replace(/```json|```/g, "");
+  } catch (error) {
+    console.log(error);
+    throw error;
+  }
+}
+
+async function generateSummary(rawDescription) {
+  const textPrompt = normalizeNewlines(rawDescription);
+  const chunks = createChunks(textPrompt);
+
+  if (chunks.length === 1) {
+    await delay();
+    return await callGenAI(textPrompt);
+  }
+
+  const chunkSummaries = [];
+  for (const chunk of chunks) {
+    try {
+      const chunkSummary = await callGenAI(chunk);
+      if (chunkSummary) {
+        chunkSummaries.push(chunkSummary);
+      }
+      await delay();
+    } catch (error) {
+      console.log("Error processing chunk:", error);
+    }
+  }
+  if (chunkSummaries.length > 0) {
+    let formattedSummary = "";
+    let formattedRequirements = "";
+    let formattedEmails = "";
+    let formattedPhones = "";
+
+    for (const chunkSummary of chunkSummaries) {
+      try {
+        const jsonSummary = JSON.parse(chunkSummary);
+
+        if (jsonSummary.summary) {
+          formattedSummary += jsonSummary.summary + "\n";
+        }
+        if (jsonSummary.email) {
+          formattedEmails += jsonSummary.email + "\n";
+        }
+        if (jsonSummary.phone) {
+          if (Array.isArray(jsonSummary.phone)) {
+            formattedPhones +=
+              jsonSummary.phone.filter(Boolean).join(",") + "\n";
+          } else {
+            formattedPhones += jsonSummary.phone + "\n";
+          }
+        }
+        if (jsonSummary.requirements) {
+          if (Array.isArray(jsonSummary.requirements)) {
+            formattedRequirements +=
+              jsonSummary.requirements.filter(Boolean).join("\n") + "\n";
+          }
+        }
+      } catch (error) {
+        console.log("Error processing chunk:", error);
+        throw error;
+      }
+    }
+
+    const finalPrompt = `
+  Summaries after chunking:
+  ${formattedSummary}
+
+  Requirements after chunking:
+  ${formattedRequirements}
+
+  Emails after chunking:
+  ${formattedEmails}
+
+  Phones after chunking:
+  ${formattedPhones}
+  `;
+
+    return await callGenAI(finalPrompt);
+  } else {
+    throw new Error("Chunks not processed");
+  }
+}
+
+async function updateTenderSummary(tender, summary) {
+  try {
+    const jsonSummary = JSON.parse(summary);
+    let formattedSummary = "";
+    let formattedRequirements = "";
+    let formattedEmails = "";
+    let formattedPhones = "";
+
+    if (jsonSummary.summary) {
+      formattedSummary = jsonSummary.summary;
+    }
+    if (jsonSummary.email) {
+      formattedEmails = jsonSummary.email;
+    }
+    if (jsonSummary.phone) {
+      formattedPhones = Array.isArray(jsonSummary.phone)
+        ? jsonSummary.phone.filter(Boolean).join(",")
+        : jsonSummary.phone;
+    }
+    if (jsonSummary.requirements) {
+      formattedRequirements = Array.isArray(jsonSummary.requirements)
+        ? jsonSummary.requirements.filter(Boolean).join("\n")
+        : jsonSummary.requirements;
+    }
+
+    tender.aiml_summary = formattedSummary;
+    tender.email = formattedEmails;
+    tender.phone = formattedPhones;
+    tender.requirements = formattedRequirements;
+
+    await redis.hSet(`tender:${tender.tenderid}`, tender);
+
+    if (tender.lastDate) {
+      try {
+        const timestamp = Math.floor(
+          new Date(tender.lastDate).getTime() / 1000
+        );
+        await redis.zAdd("tenders:by:date", [
+          { score: timestamp, value: String(tender.tenderid) },
+        ]);
+      } catch (error) {
+        console.log(
+          `Date conversion error for tender ${tender.tenderid}:`,
+          error
+        );
+      }
+    }
+
+    return true;
+  } catch (error) {
+    console.log(error);
+    return false;
+  }
+}
+
+async function getUnprocessedTenders() {
+  try {
+    return await redis.keys("queue_tender_*");
+  } catch (error) {
+    console.log(error);
+    throw error;
+  }
 }

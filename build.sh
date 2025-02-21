@@ -20,7 +20,6 @@ echo "********************************************"
 
 cd ../scraper
 npm install
-# Install Python dependencies
-pip3 install --user redis python-dotenv google-generativeai
+echo "Running Scraper to save data"
+npm node index.js
 cd ..
-
