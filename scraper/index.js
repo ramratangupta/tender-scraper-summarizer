@@ -223,21 +223,23 @@ try {
     console.log("Found unprocessed tenders:", tenders.length);
 
     for (const redisKey of tenders) {
-      const tenderData = await redis.get(redisKey);
-      const tender = JSON.parse(tenderData);
-      console.log("ML Processing tender ID:", tender.tenderid);
       try {
-        const summary = await generateSummary(tender.raw_description);
-        if (summary) {
-          if (await updateTenderSummary(tender, summary)) {
-            console.log("Successfully processed tender");
-            await redis.del(redisKey);
-          } else {
-            console.log("Failed to update tender");
+        const tenderData = await redis.get(redisKey);
+        const tender = parseJSON(tenderData);
+        if (tender) {
+          console.log("ML Processing tender ID:", tender.tenderid);
+          const summary = await generateSummary(tender.raw_description);
+          if (summary) {
+            if (await updateTenderSummary(tender, summary)) {
+              console.log("Successfully processed tender");
+              await redis.del(redisKey);
+            } else {
+              console.log("Failed to update tender");
+            }
           }
         }
       } catch (error) {
-        console.log("Error processing tender:", error);
+        console.log("JSONparse1 Error processing tender:", error);
       }
     }
   } catch (error) {
@@ -268,7 +270,7 @@ function createChunks(text, chunkSize = 50000) {
   return chunks;
 }
 
-async function callGenAI(textPrompt) {
+async function callGenAI(textPrompt, callCount = 1) {
   const jsonFormat = `{
       "summary": "text here",
       "email": "email here",
@@ -296,6 +298,15 @@ async function callGenAI(textPrompt) {
     const response = await result.response;
     return response.text().replace(/```json|```/g, "");
   } catch (error) {
+    if (error.status === 429) {
+      console.log("GenAI Quota Exceeded");
+      if (callCount > 5) {
+        throw new Error("Exit callgen ai after 5 retry");
+      }
+      const delayTime = 30 + 3 ** callCount;
+      await delay(delayTime, "GenAI");
+      return callGenAI(textPrompt, callCount + 1);
+    }
     console.log(error);
     throw error;
   }
@@ -330,30 +341,32 @@ async function generateSummary(rawDescription) {
 
     for (const chunkSummary of chunkSummaries) {
       try {
-        const jsonSummary = JSON.parse(chunkSummary);
-
-        if (jsonSummary.summary) {
-          formattedSummary += jsonSummary.summary + "\n";
-        }
-        if (jsonSummary.email) {
-          formattedEmails += jsonSummary.email + "\n";
-        }
-        if (jsonSummary.phone) {
-          if (Array.isArray(jsonSummary.phone)) {
-            formattedPhones +=
-              jsonSummary.phone.filter(Boolean).join(",") + "\n";
-          } else {
-            formattedPhones += jsonSummary.phone + "\n";
+        const jsonSummary = parseJSON(chunkSummary);
+        if (jsonSummary) {
+          if (jsonSummary.summary) {
+            formattedSummary += jsonSummary.summary + "\n";
           }
-        }
-        if (jsonSummary.requirements) {
-          if (Array.isArray(jsonSummary.requirements)) {
-            formattedRequirements +=
-              jsonSummary.requirements.filter(Boolean).join("\n") + "\n";
+          if (jsonSummary.email) {
+            formattedEmails += jsonSummary.email + "\n";
+          }
+          if (jsonSummary.phone) {
+            if (Array.isArray(jsonSummary.phone)) {
+              formattedPhones +=
+                jsonSummary.phone.filter(Boolean).join(",") + "\n";
+            } else {
+              formattedPhones += jsonSummary.phone + "\n";
+            }
+          }
+          if (jsonSummary.requirements) {
+            if (Array.isArray(jsonSummary.requirements)) {
+              formattedRequirements +=
+                jsonSummary.requirements.filter(Boolean).join("\n") + "\n";
+            }
           }
         }
       } catch (error) {
-        console.log("Error processing chunk:", error);
+        console.log("Chunk summary1:", chunkSummary);
+        console.log("JSONparse2 Error processing chunk:", error);
         throw error;
       }
     }
@@ -380,55 +393,58 @@ async function generateSummary(rawDescription) {
 
 async function updateTenderSummary(tender, summary) {
   try {
-    const jsonSummary = JSON.parse(summary);
-    let formattedSummary = "";
-    let formattedRequirements = "";
-    let formattedEmails = "";
-    let formattedPhones = "";
+    const jsonSummary = parseJSON(summary);
+    if (jsonSummary) {
+      let formattedSummary = "";
+      let formattedRequirements = "";
+      let formattedEmails = "";
+      let formattedPhones = "";
 
-    if (jsonSummary.summary) {
-      formattedSummary = jsonSummary.summary;
-    }
-    if (jsonSummary.email) {
-      formattedEmails = jsonSummary.email;
-    }
-    if (jsonSummary.phone) {
-      formattedPhones = Array.isArray(jsonSummary.phone)
-        ? jsonSummary.phone.filter(Boolean).join(",")
-        : jsonSummary.phone;
-    }
-    if (jsonSummary.requirements) {
-      formattedRequirements = Array.isArray(jsonSummary.requirements)
-        ? jsonSummary.requirements.filter(Boolean).join("\n")
-        : jsonSummary.requirements;
-    }
-
-    tender.aiml_summary = formattedSummary;
-    tender.email = formattedEmails;
-    tender.phone = formattedPhones;
-    tender.requirements = formattedRequirements;
-
-    await redis.hSet(`tender:${tender.tenderid}`, tender);
-
-    if (tender.lastDate) {
-      try {
-        const timestamp = Math.floor(
-          new Date(tender.lastDate).getTime() / 1000
-        );
-        await redis.zAdd("tenders:by:date", [
-          { score: timestamp, value: String(tender.tenderid) },
-        ]);
-      } catch (error) {
-        console.log(
-          `Date conversion error for tender ${tender.tenderid}:`,
-          error
-        );
+      if (jsonSummary.summary) {
+        formattedSummary = jsonSummary.summary;
       }
-    }
+      if (jsonSummary.email) {
+        formattedEmails = jsonSummary.email;
+      }
+      if (jsonSummary.phone) {
+        formattedPhones = Array.isArray(jsonSummary.phone)
+          ? jsonSummary.phone.filter(Boolean).join(",")
+          : jsonSummary.phone;
+      }
+      if (jsonSummary.requirements) {
+        formattedRequirements = Array.isArray(jsonSummary.requirements)
+          ? jsonSummary.requirements.filter(Boolean).join("\n")
+          : jsonSummary.requirements;
+      }
 
-    return true;
+      tender.aiml_summary = formattedSummary;
+      tender.email = formattedEmails;
+      tender.phone = formattedPhones;
+      tender.requirements = formattedRequirements;
+
+      await redis.hSet(`tender:${tender.tenderid}`, tender);
+
+      if (tender.lastDate) {
+        try {
+          const timestamp = Math.floor(
+            new Date(tender.lastDate).getTime() / 1000
+          );
+          await redis.zAdd("tenders:by:date", [
+            { score: timestamp, value: String(tender.tenderid) },
+          ]);
+        } catch (error) {
+          console.log(
+            `Date conversion error for tender ${tender.tenderid}:`,
+            error
+          );
+        }
+      }
+      return true;
+    } else {
+      return false;
+    }
   } catch (error) {
-    console.log(error);
+    console.log("JSONparse3", error);
     return false;
   }
 }
@@ -439,5 +455,12 @@ async function getUnprocessedTenders() {
   } catch (error) {
     console.log(error);
     throw error;
+  }
+}
+function parseJSON(str) {
+  try {
+    return JSON.parse(str);
+  } catch (e) {
+    return false;
   }
 }
