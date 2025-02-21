@@ -21,5 +21,5 @@ echo "********************************************"
 cd ../scraper
 npm install
 echo "Running Scraper to save data"
-npm node index.js
+node index.js
 cd ..
