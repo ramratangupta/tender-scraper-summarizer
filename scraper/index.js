@@ -29,49 +29,44 @@ async function scrapeWebsite(url) {
 
     const $ = load(response.data);
     let rows = $("#tenders tbody tr").toArray();
-    //get random 1 index from rows
-    if (process.env.NODE_ENV === "production") {
-      //CRON is faling after 1 min
-      const randomIndex = Math.floor(Math.random() * rows.length);
-      rows = [rows[randomIndex]]
-    }
-    
+    const tendersIds = await getTendersIds();
+    let existsCount = 0;
     // Process all rows in parallel using Promise.all
-    const tenders = await Promise.all(
-      rows.map(async (element, index) => {
-        const tds = $(element).find("td");
-        const tenderURL = tds.eq(2).find("a").attr("href");
+    const tenders = rows.map((element, index) => {
+      const tds = $(element).find("td");
+      const tenderURL = tds.eq(2).find("a").attr("href");
 
-        if (!tenderURL) {
-          console.warn(`Missing tender URL for row ${index + 1}`);
-          return null; // Skip this row
+      if (!tenderURL) {
+        console.warn(`Missing tender URL for row ${index + 1}`);
+        return null; // Skip this row
+      }
+      const tenderid = parseInt(tds.eq(1).text().trim());
+
+      try {
+        const tenderid = parseInt(tds.eq(1).text().trim());
+        if (!tendersIds.has(tenderid)) {
+          return {
+            tenderid: tenderid,
+            title: tds.eq(2).text().trim(),
+            lastDate: formatDateMYSQL(tds.eq(3).text().trim()),
+            publishDate: formatDateMYSQL(tds.eq(4).text().trim()),
+            tenderURL: tenderURL,
+          };
+        } else {
+          existsCount++;
         }
-        const tenderid = tds.eq(1).text().trim();
+      } catch (error) {
+        console.error(`Error checking tender ${tenderid}:`, error);
+      }
 
-        try {
-          const checkDB = await checkTenderExtis(tenderid);
-          console.log(`Checking tender ${tenderid} in DB:`);
-          // If tender doesn't exist in DB
-          if (checkDB == null) {
-            return {
-              tenderid: tenderid,
-              title: tds.eq(2).text().trim(),
-              lastDate: formatDateMYSQL(tds.eq(3).text().trim()),
-              publishDate: formatDateMYSQL(tds.eq(4).text().trim()),
-              tenderURL: tenderURL,
-            };
-          }
-        } catch (error) {
-          console.error(`Error checking tender ${tenderid}:`, error);
-        }
-
-        return null; // Skip if tender exists or error occurred
-      })
-    );
+      return null; // Skip if tender exists or error occurred
+    });
 
     // Filter out null values and empty results
     const validTenders = tenders.filter((tender) => tender !== null);
-
+    if(existsCount>0){
+      console.log(`Found ${existsCount} existing tenders`);
+    }
     if (validTenders.length === 0) {
       console.warn("No new tenders found to process");
     } else {
@@ -188,35 +183,34 @@ async function createTender(tenderData) {
   }
 }
 
-async function checkTenderExtis(tenderid) {
+async function getTendersIds() {
   try {
-    return await redis.get("queue_tender_" + tenderid);
+    const keys = await redis.keys("*tender*");
+    return new Set(
+      keys
+        .filter((k) => /\d/.test(k))
+        .map((k) =>
+          parseInt(k.replace("queue_tender_", "").replace("tender:", ""))
+        )
+    );
   } catch (error) {
     console.error("Error checking database:", error);
     throw error;
   }
 }
-
-//process.exit()
-// Execute
-processTenders()
-  .then((results) => {
-    if (results && results.length > 0) {
-      results.forEach((tender) => {
-        createTender(tender)
-          .then(() =>
-            console.log(`Tender ${tender.tenderid} saved successfully`)
-          )
-          .catch((error) =>
-            console.error(`Error saving tender ${tender.tenderid}:`, error)
-          );
-      });
-    } else {
-      console.log("No tenders to process");
+try {
+  const tendersTobesaved = await processTenders();
+  for (const tender of tendersTobesaved) {
+    try {
+      await createTender(tender);
+      console.log(`Tender ${tender.tenderid} saved to redis`);
+    } catch (error) {
+      console.error("Error saving tender to redis:", error, tender.tenderid);
     }
-  })
-  .catch((error) => console.error("Application error:", error))
-  .finally(() => {
-    redis.quit();
-    process.exit();
-  });
+  }
+} catch (error) {
+  console.error("Error processing tenders:", error);
+} finally {
+  await redis.quit();
+  process.exit();
+}
