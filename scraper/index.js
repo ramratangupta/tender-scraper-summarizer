@@ -1,5 +1,11 @@
 import dotenv from "dotenv";
-import axios from "axios";
+import axiosP from "axios";
+import https from 'https';
+const axios = axiosP.create({
+  httpsAgent: new https.Agent({  
+    rejectUnauthorized: false
+  })
+});
 import { load } from "cheerio";
 import pdf from "pdf-parse/lib/pdf-parse.js";
 import { createClient } from "redis";
@@ -9,7 +15,7 @@ const redis = await createClient({ url: process.env.REDIS_URL }).connect();
 
 // Initialize Google AI
 const genAI = new GoogleGenerativeAI(process.env.GOOGLE_API_KEY);
-const model = genAI.getGenerativeModel({ model: "gemini-pro" });
+const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash-8b" });
 
 /**
  * I choosed this becasue it do not require any capatca
