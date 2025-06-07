@@ -84,49 +84,71 @@ app.get("/api/tenders", async (req, res) => {
       });
     }
 
-    // Always use zRange with REV option to get all results in descending order
-    let tenderIds = await redis.zRangeWithScores("tenders:by:date", 0, -1);
+    // Get all tender IDs with scores
+    let allTenderIds = await redis.zRangeWithScores("tenders:by:date", 0, -1);
+    
+    // Sort by timestamp (descending)
+    allTenderIds.sort((a, b) => b.score - a.score);
+    
     // If date range is specified, filter the results
     if (startDate && endDate) {
       const startTimestamp = Math.floor(new Date(startDate).getTime() / 1000);
       const endTimestamp = Math.floor(new Date(endDate).getTime() / 1000);
-      
-      // Filter by date range and sort by timestamp (descending)
-      tenderIds = tenderIds
-        .filter(item => item.score >= startTimestamp && item.score <= endTimestamp);
-    }
-
-    // Fetch all tenders data
-    const tenderPromises = tenderIds
-    .sort((a, b) => b.score - a.score)
-    .map((item) => redis.hGetAll(`tender:${item.value}`));
-    let tenders = await Promise.all(tenderPromises);
-
-    // Filter out empty results
-    tenders = tenders.filter((tender) => Object.keys(tender).length > 0);
-
-    // Apply keyword filter if provided
-    if (keywords) {
-      const searchTerms = keywords.toLowerCase().split(" ");
-      tenders = tenders.filter((tender) =>
-        searchTerms.some(
-          (term) =>
-            tender.title?.toLowerCase().includes(term) ||
-            tender.aiml_summary?.toLowerCase().includes(term)
-        )
+      allTenderIds = allTenderIds.filter(item => 
+        item.score >= startTimestamp && item.score <= endTimestamp
       );
     }
-
-    // Apply pagination
-    const totalItems = tenders.length;
-    const paginatedTenders = tenders.slice(offset, offset + parseInt(limit));
+    
+    let paginatedTenders = [];
+    let totalItems = allTenderIds.length;
+    
+    // If keywords are provided, we need to fetch all data to filter properly
+    if (keywords) {
+      // Fetch all tenders data for proper filtering
+      const allTenderPromises = allTenderIds.map(item => 
+        redis.hGetAll(`tender:${item.value}`)
+      );
+      let allTenders = await Promise.all(allTenderPromises);
+      
+      // Filter out empty results
+      allTenders = allTenders.filter(tender => 
+        Object.keys(tender).length > 0
+      );
+      
+      // Apply keyword filter
+      const searchTerms = keywords.toLowerCase().split(" ");
+      allTenders = allTenders.filter(tender =>
+        searchTerms.some(term =>
+          tender.title?.toLowerCase().includes(term) ||
+          tender.aiml_summary?.toLowerCase().includes(term)
+        )
+      );
+      
+      // Recalculate pagination based on filtered results
+      totalItems = allTenders.length;
+      paginatedTenders = allTenders.slice(offset, offset + parseInt(limit));
+    } else {
+      // No keyword filtering, apply pagination to IDs before fetching tender data
+      const paginatedIds = allTenderIds.slice(offset, offset + parseInt(limit));
+      
+      // Fetch only the paginated tenders data
+      const tenderPromises = paginatedIds.map(item => 
+        redis.hGetAll(`tender:${item.value}`)
+      );
+      paginatedTenders = await Promise.all(tenderPromises);
+      
+      // Filter out empty results
+      paginatedTenders = paginatedTenders.filter(tender => 
+        Object.keys(tender).length > 0
+      );
+    }
 
     res.json({
       success: true,
       data: paginatedTenders,
       pagination: {
         currentPage: parseInt(page),
-        totalPages: Math.ceil(totalItems / limit),
+        totalPages: Math.ceil(totalItems / parseInt(limit)),
         totalItems,
         itemsPerPage: parseInt(limit),
       },
