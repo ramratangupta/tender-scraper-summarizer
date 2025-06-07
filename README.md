@@ -131,3 +131,15 @@ cd frontend && npm start
 - After commit run `vercel` in root folder
 
 ## [PPT Link](https://docs.google.com/presentation/d/13pWlCn6h7zvoHiOJ2kmVe89IUoSnRUcL/edit?usp=sharing&ouid=114433674424419894797&rtpof=true&sd=true)
+
+## ENV Variables
+
+- api/.env and scraper/.env
+```
+GOOGLE_API_KEY=<apikey>
+REDIS_URL=redis://default:<password>@127.0.0.1:6379
+```
+- frontend/.env.production
+```
+REACT_APP_API_URL=/api
+```
