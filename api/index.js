@@ -84,30 +84,22 @@ app.get("/api/tenders", async (req, res) => {
       });
     }
 
-    // Get tender IDs sorted by date (latest first)
-    let tenderIds;
+    // Always use zRange with REV option to get all results in descending order
+    let tenderIds = await redis.zRangeWithScores("tenders:by:date", 0, -1);
+    // If date range is specified, filter the results
     if (startDate && endDate) {
       const startTimestamp = Math.floor(new Date(startDate).getTime() / 1000);
       const endTimestamp = Math.floor(new Date(endDate).getTime() / 1000);
       
-      // Get all entries with scores and filter by date range
-      const result = await redis.zRangeWithScores("tenders:by:date", 0, -1);
-      
       // Filter by date range and sort by timestamp (descending)
-      const filteredResults = result
-        .filter(item => item.score >= startTimestamp && item.score <= endTimestamp)
-        .sort((a, b) => b.score - a.score);
-      
-      tenderIds = filteredResults.map(item => item.value);
-    } else {
-      // For all tenders, get with scores and sort manually
-      const result = await redis.zRangeWithScores("tenders:by:date", 0, -1);
-      const sortedResults = result.sort((a, b) => b.score - a.score);
-      tenderIds = sortedResults.map(item => item.value);
+      tenderIds = tenderIds
+        .filter(item => item.score >= startTimestamp && item.score <= endTimestamp);
     }
 
     // Fetch all tenders data
-    const tenderPromises = tenderIds.map((id) => redis.hGetAll(`tender:${id}`));
+    const tenderPromises = tenderIds
+    .sort((a, b) => b.score - a.score)
+    .map((item) => redis.hGetAll(`tender:${item.value}`));
     let tenders = await Promise.all(tenderPromises);
 
     // Filter out empty results
