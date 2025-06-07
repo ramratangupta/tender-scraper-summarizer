@@ -84,18 +84,20 @@ app.get("/api/tenders", async (req, res) => {
       });
     }
 
-    // Get tender IDs sorted by date
+    // Get tender IDs sorted by date (latest first)
     let tenderIds;
     if (startDate && endDate) {
       const startTimestamp = Math.floor(new Date(startDate).getTime() / 1000);
       const endTimestamp = Math.floor(new Date(endDate).getTime() / 1000);
+      // Use max and min in reverse order with REV option to get descending order
       tenderIds = await redis.zRangeByScore(
         "tenders:by:date",
+        endTimestamp,
         startTimestamp,
-        endTimestamp
+        { REV: true }
       );
     } else {
-      tenderIds = await redis.zRange("tenders:by:date", 0, -1, "SCORE");
+      tenderIds = await redis.zRange("tenders:by:date", 0, -1, "REV");
     }
 
     // Fetch all tenders data
