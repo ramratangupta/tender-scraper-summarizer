@@ -95,7 +95,7 @@ app.get("/api/tenders", async (req, res) => {
         endTimestamp
       );
     } else {
-      tenderIds = await redis.zRange("tenders:by:date", 0, -1, "REV");
+      tenderIds = await redis.zRange("tenders:by:date", 0, -1, "SCORE");
     }
 
     // Fetch all tenders data
