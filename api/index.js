@@ -89,15 +89,21 @@ app.get("/api/tenders", async (req, res) => {
     if (startDate && endDate) {
       const startTimestamp = Math.floor(new Date(startDate).getTime() / 1000);
       const endTimestamp = Math.floor(new Date(endDate).getTime() / 1000);
-      // Use max and min in reverse order with REV option to get descending order
-      tenderIds = await redis.zRangeByScore(
-        "tenders:by:date",
-        endTimestamp,
-        startTimestamp,
-        { REV: true }
-      );
+      
+      // Get all entries with scores and filter by date range
+      const result = await redis.zRangeWithScores("tenders:by:date", 0, -1);
+      
+      // Filter by date range and sort by timestamp (descending)
+      const filteredResults = result
+        .filter(item => item.score >= startTimestamp && item.score <= endTimestamp)
+        .sort((a, b) => b.score - a.score);
+      
+      tenderIds = filteredResults.map(item => item.value);
     } else {
-      tenderIds = await redis.zRange("tenders:by:date", 0, -1, "REV");
+      // For all tenders, get with scores and sort manually
+      const result = await redis.zRangeWithScores("tenders:by:date", 0, -1);
+      const sortedResults = result.sort((a, b) => b.score - a.score);
+      tenderIds = sortedResults.map(item => item.value);
     }
 
     // Fetch all tenders data
