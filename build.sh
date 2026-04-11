@@ -3,7 +3,7 @@
 
 # Exit on any error
 set -e
-
+node --version
 # Install Node.js dependencies
 echo "Installing Node.js dependencies... Frontend"
 echo "********************************************"

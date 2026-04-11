@@ -133,6 +133,7 @@ cd frontend && npm start
 
 ## [PPT Link](https://docs.google.com/presentation/d/13pWlCn6h7zvoHiOJ2kmVe89IUoSnRUcL/edit?usp=sharing&ouid=114433674424419894797&rtpof=true&sd=true)
 
+## [Vecel Link](https://tender-scraper-summarizer.vercel.app/)
 ## ENV Variables
 
 - api/.env and scraper/.env
