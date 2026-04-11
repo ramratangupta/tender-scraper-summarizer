@@ -1,8 +1,20 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import App from './App'; // Import the actual component for coverage
+import { render, screen, fireEvent, waitFor } from '@testing-library/react';
+import { BrowserRouter } from 'react-router-dom';
+import '@testing-library/jest-dom';
+import App from './App';
 
 // Mock fetch API
 global.fetch = vi.fn();
+
+// Helper function to render App with Router
+const renderWithRouter = (component) => {
+  return render(
+    <BrowserRouter>
+      {component}
+    </BrowserRouter>
+  );
+};
 
 describe('App Component', () => {
   beforeEach(() => {
@@ -129,10 +141,72 @@ describe('App Component', () => {
     });
   });
 
-  describe('Component Import', () => {
-    it('can import App component', () => {
-      expect(typeof App).toBe('function');
-      expect(App.name).toBe('App');
+  describe('Component Rendering', () => {
+    beforeEach(() => {
+      // Mock successful API response for all fetch calls
+      global.fetch.mockResolvedValue({
+        ok: true,
+        json: () => Promise.resolve({
+          data: [
+            {
+              tenderid: 'TENDER001',
+              title: 'Test Tender 1',
+              aiml_summary: 'This is a test summary',
+              lastDate: '2024-12-31T00:00:00.000Z'
+            }
+          ],
+          pagination: {
+            currentPage: 1,
+            totalPages: 1,
+            totalItems: 1,
+            itemsPerPage: 10
+          }
+        })
+      });
+    });
+
+    it('renders the main heading', async () => {
+      renderWithRouter(<App />);
+
+      await waitFor(() => {
+        expect(screen.getByText('IIT Delhi Tender List')).toBeInTheDocument();
+      });
+    });
+
+    it('renders filter inputs', async () => {
+      renderWithRouter(<App />);
+
+      await waitFor(() => {
+        expect(screen.getByPlaceholderText('Search by Tender ID')).toBeInTheDocument();
+        expect(screen.getByPlaceholderText('Search by keywords')).toBeInTheDocument();
+      });
+    });
+
+    it('renders clear filters button', async () => {
+      renderWithRouter(<App />);
+
+      await waitFor(() => {
+        expect(screen.getByRole('button', { name: /clear filters/i })).toBeInTheDocument();
+      });
+    });
+
+    it('displays loading state initially', () => {
+      // Mock pending fetch
+      global.fetch.mockImplementationOnce(() => new Promise(() => {}));
+
+      renderWithRouter(<App />);
+      // Loading state should be shown initially
+      expect(screen.getByText('IIT Delhi Tender List')).toBeInTheDocument();
+    });
+
+    it('displays error message on API failure', async () => {
+      global.fetch.mockRejectedValueOnce(new Error('Network error'));
+
+      renderWithRouter(<App />);
+
+      await waitFor(() => {
+        expect(screen.getByText('Failed to fetch tenders. Please try again.')).toBeInTheDocument();
+      });
     });
   });
 

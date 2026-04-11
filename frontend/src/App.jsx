@@ -323,7 +323,7 @@ function TenderDetails() {
 // Create the main App component with routing
 function App() {
   return (
-    <BrowserRouter>
+    <>
       <nav className="navbar navbar-expand-lg navbar-dark bg-dark">
         <div className="container-fluid">
           <Link className="navbar-brand" to="/">
@@ -338,7 +338,7 @@ function App() {
           <Route path="/tender/:id" element={<TenderDetails />} />
         </Routes>
       </div>
-    </BrowserRouter>
+    </>
   );
 }
 function Loader() {
