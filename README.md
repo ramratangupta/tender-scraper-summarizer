@@ -127,8 +127,9 @@ cd api && npm start
 cd frontend && npm start
 ```
 
-## Deploy to Vercel
+## Deploy to Vercel in Preview mode
 - After commit run `vercel` in root folder
+- `vercel --prod` for production
 
 ## [PPT Link](https://docs.google.com/presentation/d/13pWlCn6h7zvoHiOJ2kmVe89IUoSnRUcL/edit?usp=sharing&ouid=114433674424419894797&rtpof=true&sd=true)
 
