@@ -10,7 +10,7 @@ vi.mock('react-router-dom', async () => {
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
-import { BrowserRouter, Routes, Route, MemoryRouter } from 'react-router-dom';
+import { BrowserRouter } from 'react-router-dom';
 import '@testing-library/jest-dom';
 import App, { TenderDetails, PaginationControls, Loader } from './App';
 // Mock fetch API
