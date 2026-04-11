@@ -1,9 +1,18 @@
+// Mock react-router-dom before any imports
+vi.mock('react-router-dom', async () => {
+  const actual = await vi.importActual('react-router-dom');
+  return {
+    ...actual,
+    useParams: vi.fn(() => ({ id: 'TENDER001' })),
+    Link: ({ children, ...props }) => <a {...props}>{children}</a>,
+  };
+});
+
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
-import { BrowserRouter } from 'react-router-dom';
+import { BrowserRouter, Routes, Route, MemoryRouter } from 'react-router-dom';
 import '@testing-library/jest-dom';
-import App from './App';
-
+import App, { TenderDetails, PaginationControls, Loader } from './App';
 // Mock fetch API
 global.fetch = vi.fn();
 
@@ -207,6 +216,278 @@ describe('App Component', () => {
       await waitFor(() => {
         expect(screen.getByText('Failed to fetch tenders. Please try again.')).toBeInTheDocument();
       });
+    });
+
+    it('displays API error message with details', async () => {
+      global.fetch.mockResolvedValueOnce({
+        ok: false,
+        json: () => Promise.resolve({ error: 'Database connection failed' })
+      });
+
+      renderWithRouter(<App />);
+
+      await waitFor(() => {
+        expect(screen.getByText('Failed to fetch tenders. Please try again. Database connection failed')).toBeInTheDocument();
+      });
+    });
+
+    it('handles filter input changes', async () => {
+      renderWithRouter(<App />);
+
+      await waitFor(() => {
+        expect(screen.getByPlaceholderText('Search by Tender ID')).toBeInTheDocument();
+      });
+
+      const tenderIdInput = screen.getByPlaceholderText('Search by Tender ID');
+      fireEvent.change(tenderIdInput, { target: { name: 'tenderId', value: 'TEST123' } });
+
+      // The filter change should trigger after debounce delay
+      await waitFor(() => {
+        expect(global.fetch).toHaveBeenCalled();
+      }, { timeout: 1500 });
+    });
+
+    it('clears all filters when clear button is clicked', async () => {
+      renderWithRouter(<App />);
+
+      await waitFor(() => {
+        expect(screen.getByRole('button', { name: /clear filters/i })).toBeInTheDocument();
+      });
+
+      const clearButton = screen.getByRole('button', { name: /clear filters/i });
+      fireEvent.click(clearButton);
+
+      // Verify fetch was called (filters cleared)
+      await waitFor(() => {
+        expect(global.fetch).toHaveBeenCalled();
+      });
+    });
+
+    it('handles pagination changes', async () => {
+      renderWithRouter(<App />);
+
+      await waitFor(() => {
+        expect(screen.getByText('IIT Delhi Tender List')).toBeInTheDocument();
+      });
+
+      // The pagination controls should be rendered (check that at least one exists)
+      const paginationNavs = screen.getAllByLabelText('Tender pagination');
+      expect(paginationNavs.length).toBeGreaterThan(0);
+    });
+  });
+
+  describe('TenderDetails Component', () => {
+    beforeEach(() => {
+      global.fetch.mockResolvedValue({
+        ok: true,
+        json: () => Promise.resolve({
+          data: {
+            tenderid: 'TENDER001',
+            title: 'Test Tender Details',
+            email: 'test@example.com',
+            phone: '123-456-7890',
+            lastDate: '2024-12-31T00:00:00.000Z',
+            publishDate: '2024-01-01T00:00:00.000Z',
+            aiml_summary: 'This is a detailed summary',
+            requirements: 'Test requirements',
+            raw_description: 'Raw description text',
+            tenderURL: 'https://example.com/tender.pdf'
+          }
+        })
+      });
+    });
+
+    it('renders tender details correctly', async () => {
+      render(<TenderDetails />);
+
+      await waitFor(() => {
+        expect(screen.getByText('Test Tender Details')).toBeInTheDocument();
+        expect(screen.getByText('test@example.com')).toBeInTheDocument();
+        expect(screen.getByText('123-456-7890')).toBeInTheDocument();
+        expect(screen.getByText('2024-12-31')).toBeInTheDocument();
+        expect(screen.getByText('2024-01-01')).toBeInTheDocument();
+        expect(screen.getByText('This is a detailed summary')).toBeInTheDocument();
+        expect(screen.getByText('Test requirements')).toBeInTheDocument();
+      });
+    });
+
+    it('shows modal when description button is clicked', async () => {
+      render(<TenderDetails />);
+
+      await waitFor(() => {
+        expect(screen.getByText('Test Tender Details')).toBeInTheDocument();
+      });
+
+      const modalButton = screen.getByText('View PDF Parsed Decription');
+      fireEvent.click(modalButton);
+
+      await waitFor(() => {
+        expect(screen.getByText('Tender Description')).toBeInTheDocument();
+        expect(screen.getByText('Raw description text')).toBeInTheDocument();
+      });
+    });
+
+    it('closes modal when close button is clicked', async () => {
+      render(<TenderDetails />);
+
+      await waitFor(() => {
+        expect(screen.getByText('Test Tender Details')).toBeInTheDocument();
+      });
+
+      const modalButton = screen.getByText('View PDF Parsed Decription');
+      fireEvent.click(modalButton);
+
+      await waitFor(() => {
+        expect(screen.getByText('Tender Description')).toBeInTheDocument();
+      });
+
+      const closeButton = screen.getByRole('button', { name: /×|close/i });
+      fireEvent.click(closeButton);
+
+      await waitFor(() => {
+        expect(screen.queryByText('Tender Description')).not.toBeInTheDocument();
+      });
+    });
+
+    it('displays error message on API failure', async () => {
+      global.fetch.mockResolvedValueOnce({
+        ok: false,
+        json: () => Promise.resolve({ error: 'Tender not found' })
+      });
+
+      render(<TenderDetails />);
+
+      await waitFor(() => {
+        expect(screen.getByText('Failed to fetch tenders. Please try again. Tender not found')).toBeInTheDocument();
+      });
+    });
+
+    it('shows loader when data is not loaded', () => {
+      global.fetch.mockImplementationOnce(() => new Promise(() => {})); // Never resolves
+
+      render(<TenderDetails />);
+
+      // Should show Loader component initially
+      expect(screen.getByRole('status')).toBeInTheDocument(); // The spinner has role="status"
+    });
+  });
+
+  describe('PaginationControls Component', () => {
+    it('renders pagination controls correctly', () => {
+      const mockOnPageChange = vi.fn();
+      const pagination = {
+        currentPage: 2,
+        totalPages: 5,
+        totalItems: 50,
+        itemsPerPage: 10
+      };
+
+      render(<PaginationControls pagination={pagination} onPageChange={mockOnPageChange} />);
+
+      expect(screen.getByText('Previous')).toBeInTheDocument();
+      expect(screen.getByText('Next')).toBeInTheDocument();
+      expect(screen.getByText('1')).toBeInTheDocument();
+      expect(screen.getByText('2')).toBeInTheDocument();
+      expect(screen.getByText('3')).toBeInTheDocument();
+      expect(screen.getByText('4')).toBeInTheDocument();
+      expect(screen.getByText('5')).toBeInTheDocument();
+    });
+
+    it('disables previous button on first page', () => {
+      const mockOnPageChange = vi.fn();
+      const pagination = {
+        currentPage: 1,
+        totalPages: 5,
+        totalItems: 50,
+        itemsPerPage: 10
+      };
+
+      render(<PaginationControls pagination={pagination} onPageChange={mockOnPageChange} />);
+
+      const previousButton = screen.getByText('Previous');
+      expect(previousButton).toBeDisabled();
+    });
+
+    it('disables next button on last page', () => {
+      const mockOnPageChange = vi.fn();
+      const pagination = {
+        currentPage: 5,
+        totalPages: 5,
+        totalItems: 50,
+        itemsPerPage: 10
+      };
+
+      render(<PaginationControls pagination={pagination} onPageChange={mockOnPageChange} />);
+
+      const nextButton = screen.getByText('Next');
+      expect(nextButton).toBeDisabled();
+    });
+
+    it('calls onPageChange when page number is clicked', () => {
+      const mockOnPageChange = vi.fn();
+      const pagination = {
+        currentPage: 2,
+        totalPages: 5,
+        totalItems: 50,
+        itemsPerPage: 10
+      };
+
+      render(<PaginationControls pagination={pagination} onPageChange={mockOnPageChange} />);
+
+      const page3Button = screen.getByText('3');
+      fireEvent.click(page3Button);
+
+      expect(mockOnPageChange).toHaveBeenCalledWith(3);
+    });
+
+    it('calls onPageChange when previous button is clicked', () => {
+      const mockOnPageChange = vi.fn();
+      const pagination = {
+        currentPage: 3,
+        totalPages: 5,
+        totalItems: 50,
+        itemsPerPage: 10
+      };
+
+      render(<PaginationControls pagination={pagination} onPageChange={mockOnPageChange} />);
+
+      const previousButton = screen.getByText('Previous');
+      fireEvent.click(previousButton);
+
+      expect(mockOnPageChange).toHaveBeenCalledWith(2);
+    });
+
+    it('calls onPageChange when next button is clicked', () => {
+      const mockOnPageChange = vi.fn();
+      const pagination = {
+        currentPage: 2,
+        totalPages: 5,
+        totalItems: 50,
+        itemsPerPage: 10
+      };
+
+      render(<PaginationControls pagination={pagination} onPageChange={mockOnPageChange} />);
+
+      const nextButton = screen.getByText('Next');
+      fireEvent.click(nextButton);
+
+      expect(mockOnPageChange).toHaveBeenCalledWith(3);
+    });
+
+    it('generates correct page numbers array', () => {
+      const mockOnPageChange = vi.fn();
+      const pagination = {
+        currentPage: 1,
+        totalPages: 3,
+        totalItems: 30,
+        itemsPerPage: 10
+      };
+
+      render(<PaginationControls pagination={pagination} onPageChange={mockOnPageChange} />);
+
+      expect(screen.getByText('1')).toBeInTheDocument();
+      expect(screen.getByText('2')).toBeInTheDocument();
+      expect(screen.getByText('3')).toBeInTheDocument();
     });
   });
 

@@ -1,6 +1,5 @@
 import React, { useState, useEffect, useCallback } from "react";
 import {
-  BrowserRouter,
   Routes,
   Route,
   Link,
@@ -422,4 +421,6 @@ const PaginationControls = ({ pagination, onPageChange }) => {
     </nav>
   );
 };
+
+export { TenderDetails, PaginationControls, Loader };
 export default App;
