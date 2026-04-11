@@ -1,7 +1,7 @@
 {
   "version": 2,
   "buildCommand": "./build.sh",
-  "outputDirectory": "frontend/dist",
+  "outputDirectory": "dist",
   "rewrites": [
     {
       "source": "/api/tenders/:id",

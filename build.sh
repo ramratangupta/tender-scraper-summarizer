@@ -2,7 +2,7 @@
 #!/bin/bash
 
 # Install Node.js dependencies
-echo "Installing Node.js dependencies... Fronend"
+echo "Installing Node.js dependencies... Frontend"
 echo "********************************************"
 cd frontend
 npm ci
@@ -13,6 +13,12 @@ echo "********************************************"
 
 cd ../api
 npm ci
+
+# Copy public assets to dist
+echo "Copying public assets..."
+cd ..
+cp -r frontend/public/* dist/ 2>/dev/null || true
+
 # Return to root
 
 # echo "Installing Node.js dependencies... Scraper"
