@@ -68,3 +68,4 @@ out/
 # Test output
 test-results/
 .vercel
+api/dump.rdb
