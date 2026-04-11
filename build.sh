@@ -15,11 +15,11 @@ cd ../api
 npm install
 # Return to root
 
-echo "Installing Node.js dependencies... Scraper"
-echo "********************************************"
+# echo "Installing Node.js dependencies... Scraper"
+# echo "********************************************"
 
-cd ../scraper
-npm install
-echo "Running Scraper to save data"
-node index.js
+# cd ../scraper
+# npm install
+# echo "Running Scraper to save data"
+# node index.js
 cd ..
