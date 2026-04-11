@@ -15,7 +15,7 @@ const redis = await createClient({ url: process.env.REDIS_URL }).connect();
 
 // Initialize Google AI
 const genAI = new GoogleGenerativeAI(process.env.GOOGLE_API_KEY);
-const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash-8b" });
+const model = genAI.getGenerativeModel({ model: "gemini-flash-latest" });
 
 /**
  * I choosed this becasue it do not require any capatca
