@@ -8,12 +8,12 @@ set -e
 echo "Installing Node.js dependencies... Frontend"
 echo "********************************************"
 cd frontend
-npm ci
+npm ci --include=dev
 
 # Run frontend tests
 echo "Running frontend tests..."
 echo "*************************"
-npm run test:coverage
+npm test -- --run --coverage
 
 npm run build
 
