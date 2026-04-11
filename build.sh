@@ -13,7 +13,7 @@ npm ci
 # Run frontend tests
 echo "Running frontend tests..."
 echo "*************************"
-npm test -- --run --coverage
+npm test:coverage
 
 npm run build
 
