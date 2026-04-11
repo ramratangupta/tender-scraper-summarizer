@@ -221,7 +221,6 @@ function TenderDetails() {
 
     fetchTenderDetails();
     return () => {
-      console.log("unmounting");
       setTenderData(null);
     };
   }, [id]);

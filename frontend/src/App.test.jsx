@@ -27,9 +27,13 @@ const renderWithRouter = (component) => {
 
 describe('App Component', () => {
   beforeEach(() => {
+    vi.spyOn(console, 'error').mockImplementation(() => {})
     vi.clearAllMocks();
   });
 
+  afterEach(() => {
+  vi.restoreAllMocks()
+})
   describe('API Integration', () => {
     it('builds correct API URLs with filters', () => {
       const baseUrl = 'http://localhost:2900/api';
