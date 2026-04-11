@@ -1,11 +1,20 @@
 # build.sh
 #!/bin/bash
 
+# Exit on any error
+set -e
+
 # Install Node.js dependencies
 echo "Installing Node.js dependencies... Frontend"
 echo "********************************************"
 cd frontend
 npm ci
+
+# Run frontend tests
+echo "Running frontend tests..."
+echo "*************************"
+npm test -- --run --coverage
+
 npm run build
 
 echo "Installing Node.js dependencies... Backend"
@@ -13,6 +22,12 @@ echo "********************************************"
 
 cd ../api
 npm ci
+
+# Run backend tests (if any)
+echo "Running backend tests..."
+echo "************************"
+# Backend currently has no tests - skip for now
+echo "No backend tests configured - skipping"
 
 # Copy public assets to dist
 echo "Copying public assets..."
