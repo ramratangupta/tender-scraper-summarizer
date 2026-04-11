@@ -13,7 +13,7 @@ npm ci --include=dev
 # Run frontend tests
 echo "Running frontend tests..."
 echo "*************************"
-npm test -- --run --coverage
+NODE_ENV=test npm test -- --run --coverage
 
 npm run build
 
