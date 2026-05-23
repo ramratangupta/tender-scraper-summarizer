@@ -33,14 +33,4 @@ echo "No backend tests configured - skipping"
 echo "Copying public assets..."
 cd ..
 cp -r frontend/public/* dist/ 2>/dev/null || true
-
-# Return to root
-
-# echo "Installing Node.js dependencies... Scraper"
-# echo "********************************************"
-
- cd ./scraper
- npm ci
- echo "Running Scraper to save data"
- node index.js
-cd ..
+echo "Build completed successfully!"
