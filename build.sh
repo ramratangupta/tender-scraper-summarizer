@@ -39,8 +39,8 @@ cp -r frontend/public/* dist/ 2>/dev/null || true
 # echo "Installing Node.js dependencies... Scraper"
 # echo "********************************************"
 
-# cd ../scraper
-# npm ci
-# echo "Running Scraper to save data"
-# node index.js
+ cd ../scraper
+ npm ci
+ echo "Running Scraper to save data"
+ node index.js
 cd ..
