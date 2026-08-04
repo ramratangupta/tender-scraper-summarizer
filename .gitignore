@@ -69,3 +69,4 @@ out/
 test-results/
 .vercel
 api/dump.rdb
+.env*
